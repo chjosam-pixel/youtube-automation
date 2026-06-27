@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw, ImageFont
 from openai import OpenAI
 
 from pipeline.config import OPENAI_API_KEY, IMAGE_MODEL
+from pipeline.image_gen import _generate_with_retry
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -19,7 +20,7 @@ def _generate_background(topic: str, out_path: Path) -> Path:
         "Epic historical documentary thumbnail style, painterly, dramatic lighting, "
         "high contrast, no text, no watermark, 16:9 widescreen."
     )
-    result = client.images.generate(model=IMAGE_MODEL, prompt=prompt, size="1536x1024", n=1)
+    result = _generate_with_retry(prompt)
     item = result.data[0]
     if getattr(item, "b64_json", None):
         image_bytes = base64.b64decode(item.b64_json)

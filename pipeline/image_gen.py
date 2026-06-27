@@ -1,7 +1,8 @@
 import base64
+import time
 from pathlib import Path
 
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 from pipeline.config import OPENAI_API_KEY, IMAGE_MODEL, IMAGE_SIZE
 
@@ -13,15 +14,31 @@ STYLE_SUFFIX = (
     "composition, no text, no watermark, no modern elements"
 )
 
+MAX_RETRIES = 5
+RETRY_BACKOFF_SECONDS = 20
+
+
+def _generate_with_retry(full_prompt: str):
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            return client.images.generate(
+                model=IMAGE_MODEL,
+                prompt=full_prompt,
+                size=IMAGE_SIZE,
+                n=1,
+            )
+        except RateLimitError as e:
+            last_error = e
+            wait = RETRY_BACKOFF_SECONDS * (attempt + 1)
+            print(f"Rate limited generating image, retrying in {wait}s (attempt {attempt + 1}/{MAX_RETRIES})...")
+            time.sleep(wait)
+    raise last_error
+
 
 def generate_scene_image(prompt: str, out_path: Path) -> Path:
     full_prompt = f"{prompt}{STYLE_SUFFIX}"
-    result = client.images.generate(
-        model=IMAGE_MODEL,
-        prompt=full_prompt,
-        size=IMAGE_SIZE,
-        n=1,
-    )
+    result = _generate_with_retry(full_prompt)
     item = result.data[0]
     if getattr(item, "b64_json", None):
         image_bytes = base64.b64decode(item.b64_json)
