@@ -1,0 +1,76 @@
+name: Daily YouTube Upload
+
+on:
+  schedule:
+    - cron: "0 1 * * *"  # 01:00 UTC = 10:00 KST daily
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Override topic (optional)"
+        required: false
+        default: ""
+      privacy:
+        description: "YouTube privacy status"
+        required: false
+        default: "public"
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore YouTube OAuth credentials
+        run: |
+          mkdir -p credentials
+          echo "$YOUTUBE_CLIENT_SECRET_JSON" > credentials/client_secret.json
+          echo "$YOUTUBE_TOKEN_JSON" > credentials/token.json
+        env:
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+
+      - name: Run pipeline and upload
+        run: |
+          ARGS="daily --privacy ${{ github.event.inputs.privacy || 'public' }}"
+          if [ -n "${{ github.event.inputs.topic }}" ]; then
+            ARGS="$ARGS --topic ${{ github.event.inputs.topic }}"
+          fi
+          python main.py $ARGS
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+
+      - name: Persist topic rotation state
+        run: |
+          git config user.name "youtube-automation-bot"
+          git config user.email "actions@github.com"
+          git add pipeline/used_topics.json
+          git diff --staged --quiet || git commit -m "chore: update used topics state [skip ci]"
+          git push origin ${{ github.ref_name }}
+
+      - name: Upload run artifacts (logs, video metadata)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-output-${{ github.run_id }}
+          path: output/**/result.json
+          retention-days: 14
