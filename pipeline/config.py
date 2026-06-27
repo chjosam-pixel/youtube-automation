@@ -23,8 +23,8 @@ YOUTUBE_TOKEN_FILE = ROOT_DIR / os.environ.get(
 
 # Script / content settings
 SCRIPT_MODEL = os.environ.get("SCRIPT_MODEL", "gpt-4o")
-IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "dall-e-3")
-IMAGE_SIZE = "1792x1024"  # landscape, closest DALL-E 3 support to 16:9
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1")
+IMAGE_SIZE = "1536x1024"  # landscape, closest gpt-image-1 support to 16:9
 VIDEO_WIDTH = 1920
 VIDEO_HEIGHT = 1080
 VIDEO_FPS = 30

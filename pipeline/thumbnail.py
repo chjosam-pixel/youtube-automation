@@ -19,7 +19,7 @@ def _generate_background(topic: str, out_path: Path) -> Path:
         "Epic historical documentary thumbnail style, painterly, dramatic lighting, "
         "high contrast, no text, no watermark, 16:9 widescreen."
     )
-    result = client.images.generate(model=IMAGE_MODEL, prompt=prompt, size="1792x1024", n=1)
+    result = client.images.generate(model=IMAGE_MODEL, prompt=prompt, size="1536x1024", n=1)
     item = result.data[0]
     if getattr(item, "b64_json", None):
         image_bytes = base64.b64decode(item.b64_json)
