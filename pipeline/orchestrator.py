@@ -13,16 +13,21 @@ from pipeline.trends import get_trending_topic
 
 
 def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status: str = "public") -> dict:
+    context: list[str] = []
     if topic is None:
-        topic = get_trending_topic()
+        trend = get_trending_topic()
+        topic = trend["topic"]
+        context = trend["context"]
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = OUTPUT_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"[1/7] Topic: {topic}")
+    if context:
+        print(f"[1/7] Context: {context}")
 
     print("[2/7] Generating script...")
-    script = generate_script(topic)
+    script = generate_script(topic, context)
     (run_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
     scenes = script["scenes"]
 

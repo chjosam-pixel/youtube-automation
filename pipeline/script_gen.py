@@ -31,6 +31,7 @@ SYSTEM_PROMPT = """أنت كاتب سيناريو وثائقي متمرس، مت
 - تجنب أي تعبيرات سياسية حساسة معاصرة، وحافظ على منظور سرد تاريخي موضوعي ومحايد.
 - استخدم العربية الفصحى المعيارية (Modern Standard Arabic) في title وdescription وtags وnarration فقط.
 - يجب أن يكون image_prompt بالإنجليزية فقط، ولا يحتوي على أي نص أو ترجمة أو عناصر حديثة.
+- قد يكون الموضوع المعطى كلمة أو عبارة مفتاحية رائجة قصيرة وغامضة. إذا تم تزويدك بعناوين أخبار حقيقية مرتبطة بهذا الموضوع، يجب أن تستند وقائع السيناريو إليها حصريًا، ولا يجوز اختراع تفاصيل (كأسماء فرق أو مباريات أو أحداث) غير مذكورة في تلك العناوين أو غير مؤكدة بوضوح. إذا لم تُزوَّد بعناوين أخبار، التزم بوصف الموضوع بشكل عام دون افتراض سياق محدد (مثل نوع رياضة أو حدث معين) لم يُذكر صريحًا في الموضوع نفسه.
 """
 
 MIN_TOTAL_WORDS = 1100
@@ -51,8 +52,14 @@ def _request_script(messages: list[dict]) -> dict:
     return json.loads(response.choices[0].message.content)
 
 
-def generate_script(topic: str) -> dict:
+def generate_script(topic: str, context: list[str] | None = None) -> dict:
     user_prompt = f"اكتب سيناريو وثائقيًا إخباريًا بالعربية الفصحى حول الموضوع الرائج حاليًا: «{topic}»."
+    if context:
+        headlines = "\n".join(f"- {line}" for line in context)
+        user_prompt += (
+            "\n\nعناوين أخبار حقيقية مرتبطة بهذا الموضوع (استخدمها كمصدر وقائعي وحيد، ولا تخرج عنها):\n"
+            f"{headlines}"
+        )
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
