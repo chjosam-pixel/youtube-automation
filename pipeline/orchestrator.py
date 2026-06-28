@@ -58,7 +58,8 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
     final_video = burn_subtitles(raw_video, srt_path, run_dir / "final.mp4")
 
     print("[7/8] Generating thumbnail...")
-    thumbnail_path = generate_thumbnail(topic, script["title"], run_dir)
+    scene_briefs = [s["image_prompt"] for s in scenes if s.get("image_prompt")]
+    thumbnail_path = generate_thumbnail(topic, script["title"], run_dir, scene_briefs)
 
     print("[8/8] Assembling vertical Shorts clip...")
     shorts_count = select_shorts_scenes(scenes_with_audio, durations)
