@@ -2,8 +2,7 @@ name: Daily YouTube Upload
 
 on:
   schedule:
-    - cron: "0 3 * * *"   # 03:00 UTC = 06:00 AST (Saudi Arabia) daily
-    - cron: "0 15 * * *"  # 15:00 UTC = 18:00 AST (Saudi Arabia) daily
+    - cron: "0 */4 * * *"  # every 4 hours UTC = 6 runs/day
   workflow_dispatch:
     inputs:
       topic:
