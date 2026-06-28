@@ -52,6 +52,9 @@ def _fetch_google_trends():
                 if not title:
                     continue
                 context_lines = []
+                pub_date = item.findtext("pubDate")
+                if pub_date:
+                    context_lines.append(f"Trend detected on: {pub_date.strip()}")
                 for news_item in item.findall("ht:news_item", NS):
                     news_title = news_item.findtext("ht:news_item_title", namespaces=NS)
                     news_source = news_item.findtext("ht:news_item_source", namespaces=NS)
