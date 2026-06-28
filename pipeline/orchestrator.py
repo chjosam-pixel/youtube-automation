@@ -2,11 +2,11 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from pipeline.config import OUTPUT_DIR
+from pipeline.config import OUTPUT_DIR, SHORTS_WIDTH, SHORTS_HEIGHT
 from pipeline.script_gen import generate_script
 from pipeline.image_gen import generate_images_for_scenes
 from pipeline.tts import synthesize_scenes
-from pipeline.subtitles import build_srt_for_scenes
+from pipeline.subtitles import build_srt_for_scenes, SHORTS_MAX_LINE_CHARS
 from pipeline.video import (
     build_scene_clips,
     concat_clips,
@@ -72,10 +72,15 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
         shorts_offsets.append(shorts_cumulative)
         shorts_cumulative += d
     shorts_srt_path = build_srt_for_scenes(
-        scenes_with_audio[:shorts_count], shorts_offsets, run_dir / "shorts_subtitles.srt"
+        scenes_with_audio[:shorts_count],
+        shorts_offsets,
+        run_dir / "shorts_subtitles.srt",
+        max_line_chars=SHORTS_MAX_LINE_CHARS,
     )
     shorts_raw = concat_clips(shorts_clip_paths, run_dir / "shorts_raw.mp4")
-    shorts_video = burn_subtitles(shorts_raw, shorts_srt_path, run_dir / "shorts_final.mp4")
+    shorts_video = burn_subtitles(
+        shorts_raw, shorts_srt_path, run_dir / "shorts_final.mp4", width=SHORTS_WIDTH, height=SHORTS_HEIGHT
+    )
 
     result = {
         "topic": topic,

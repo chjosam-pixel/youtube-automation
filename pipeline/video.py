@@ -165,11 +165,25 @@ def concat_clips(clip_paths: list[Path], out_path: Path) -> Path:
     return out_path
 
 
-def burn_subtitles(in_video: Path, srt_path: Path, out_video: Path) -> Path:
+def burn_subtitles(
+    in_video: Path,
+    srt_path: Path,
+    out_video: Path,
+    width: int = VIDEO_WIDTH,
+    height: int = VIDEO_HEIGHT,
+) -> Path:
+    """Burn subtitles sized so the text block stays within roughly the bottom
+    1/5 of the frame, instead of a fixed huge font that can swallow most of a
+    narrow vertical (Shorts) frame."""
+    font_size = max(36, round(height * 0.045))
+    outline = max(3, round(font_size * 0.06))
+    shadow = max(1, round(font_size * 0.02))
+    margin_v = round(height * 0.04)
+    margin_lr = round(width * 0.05)
     style = (
-        "FontName=Amiri,FontSize=96,Bold=1,PrimaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,BorderStyle=1,Outline=5,Shadow=2,"
-        "MarginV=40,MarginL=40,MarginR=40,Alignment=2"
+        f"FontName=Amiri,FontSize={font_size},Bold=1,PrimaryColour=&H00FFFFFF,"
+        f"OutlineColour=&H00000000,BorderStyle=1,Outline={outline},Shadow={shadow},"
+        f"MarginV={margin_v},MarginL={margin_lr},MarginR={margin_lr},Alignment=2"
     )
     vf = f"subtitles={srt_path}:force_style='{style}'"
     cmd = [
