@@ -89,7 +89,7 @@ def burn_subtitles(in_video: Path, srt_path: Path, out_video: Path) -> Path:
     style = (
         "FontName=Amiri,FontSize=96,Bold=1,PrimaryColour=&H00FFFFFF,"
         "OutlineColour=&H00000000,BorderStyle=1,Outline=5,Shadow=2,"
-        "MarginV=90,Alignment=2"
+        "MarginV=40,MarginL=40,MarginR=40,Alignment=2"
     )
     vf = f"subtitles={srt_path}:force_style='{style}'"
     cmd = [
