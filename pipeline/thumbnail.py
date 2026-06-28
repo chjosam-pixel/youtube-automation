@@ -22,8 +22,8 @@ def _to_display_text(text: str) -> str:
 
 def _generate_background(topic: str, out_path: Path) -> Path:
     prompt = (
-        f"A dramatic cinematic key art poster representing the historical theme: {topic}. "
-        "Epic historical documentary thumbnail style, painterly, dramatic lighting, "
+        f"A dramatic cinematic key art poster representing the topic: {topic}. "
+        "Epic documentary thumbnail style, painterly, dramatic lighting, "
         "high contrast, no text, no watermark, 16:9 widescreen."
     )
     result = _generate_with_retry(prompt)

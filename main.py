@@ -4,7 +4,7 @@ from pipeline.orchestrator import run_pipeline
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Korean history YouTube documentary pipeline (Arabic narration)")
+    parser = argparse.ArgumentParser(description="Daily trending-topic YouTube documentary pipeline (Arabic narration)")
     parser.add_argument("--topic", default=None, help="Override topic instead of auto-picking one")
     parser.add_argument(
         "--privacy", default="public", choices=["public", "unlisted", "private"],
