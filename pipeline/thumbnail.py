@@ -2,6 +2,8 @@ import base64
 import textwrap
 from pathlib import Path
 
+import arabic_reshaper
+from bidi.algorithm import get_display
 from PIL import Image, ImageDraw, ImageFont
 from openai import OpenAI
 
@@ -11,7 +13,11 @@ from pipeline.image_gen import _generate_with_retry
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 THUMB_SIZE = (1280, 720)
-CJK_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+ARABIC_FONT_PATH = "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Bold.ttf"
+
+
+def _to_display_text(text: str) -> str:
+    return get_display(arabic_reshaper.reshape(text))
 
 
 def _generate_background(topic: str, out_path: Path) -> Path:
@@ -38,13 +44,15 @@ def _draw_title_text(image: Image.Image, title: str) -> Image.Image:
     draw = ImageDraw.Draw(overlay)
 
     font_size = 72
-    font = ImageFont.truetype(CJK_FONT_PATH, font_size, index=2)  # index 2 = KR per fc-list order varies; fallback below
+    font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
 
-    wrapped = textwrap.wrap(title, width=12)
+    wrapped = textwrap.wrap(title, width=22)
     while len(wrapped) > 3 and font_size > 36:
         font_size -= 4
-        font = ImageFont.truetype(CJK_FONT_PATH, font_size, index=2)
-        wrapped = textwrap.wrap(title, width=12)
+        font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
+        wrapped = textwrap.wrap(title, width=22)
+
+    wrapped = [_to_display_text(line) for line in wrapped]
 
     line_height = font_size + 14
     total_height = line_height * len(wrapped)

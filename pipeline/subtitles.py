@@ -1,7 +1,7 @@
 from pathlib import Path
 
-MAX_LINE_CHARS = 18
-BREAK_CHARS = set("。！？，；：、")
+MAX_LINE_CHARS = 42
+BREAK_CHARS = set("。！？，；：、.!?,;:؟،؛")
 
 
 def _format_srt_time(t: float) -> str:

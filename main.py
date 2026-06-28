@@ -4,20 +4,19 @@ from pipeline.orchestrator import run_pipeline
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Korean history YouTube documentary pipeline")
-    parser.add_argument(
-        "mode", choices=["sample", "daily"],
-        help="'sample' generates a video without uploading; 'daily' generates and uploads to YouTube",
-    )
+    parser = argparse.ArgumentParser(description="Korean history YouTube documentary pipeline (Arabic narration)")
     parser.add_argument("--topic", default=None, help="Override topic instead of auto-picking one")
     parser.add_argument(
         "--privacy", default="public", choices=["public", "unlisted", "private"],
-        help="YouTube privacy status for uploaded video (daily mode only)",
+        help="YouTube privacy status for the uploaded video",
+    )
+    parser.add_argument(
+        "--no-upload", action="store_true",
+        help="Generate the video only, without uploading to YouTube",
     )
     args = parser.parse_args()
 
-    upload = args.mode == "daily"
-    result = run_pipeline(topic=args.topic, upload=upload, privacy_status=args.privacy)
+    result = run_pipeline(topic=args.topic, upload=not args.no_upload, privacy_status=args.privacy)
     print(result)
 
 

@@ -33,7 +33,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+          sudo apt-get install -y -qq ffmpeg fonts-hosny-amiri
 
       - name: Install Python dependencies
         run: pip install -r requirements.txt
@@ -49,7 +49,7 @@ jobs:
 
       - name: Run pipeline and upload
         run: |
-          ARGS="daily --privacy ${{ github.event.inputs.privacy || 'public' }}"
+          ARGS="--privacy ${{ github.event.inputs.privacy || 'public' }}"
           if [ -n "${{ github.event.inputs.topic }}" ]; then
             ARGS="$ARGS --topic ${{ github.event.inputs.topic }}"
           fi

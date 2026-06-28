@@ -11,6 +11,8 @@ TOPICS_STATE_FILE = ROOT_DIR / "pipeline" / "used_topics.json"
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
+# Default voice id is a placeholder; set ELEVENLABS_VOICE_ID to the Arabic
+# narrator voice "Mustafa" from the ElevenLabs Voice Library for Arabic narration.
 ELEVENLABS_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "onwK4e9ZLuTAKqWW03F9")
 ELEVENLABS_MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
 
