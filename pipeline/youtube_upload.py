@@ -57,8 +57,8 @@ def upload_video(
             "description": description[:4900],
             "tags": tags[:500],
             "categoryId": category_id,
-            "defaultLanguage": "zh-Hans",
-            "defaultAudioLanguage": "zh-Hans",
+            "defaultLanguage": "ar",
+            "defaultAudioLanguage": "ar",
         },
         "status": {
             "privacyStatus": privacy_status,

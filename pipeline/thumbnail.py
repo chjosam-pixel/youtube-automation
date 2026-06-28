@@ -22,10 +22,14 @@ def _to_display_text(text: str) -> str:
 
 def _generate_background(topic: str, out_path: Path) -> Path:
     prompt = (
-        f"An eye-catching, attention-grabbing YouTube thumbnail key art representing the topic: {topic}. "
-        "Viral modern news thumbnail style, bright clean high-key lighting, bold vibrant high-saturation "
-        "colors, punchy contrast, expressive dynamic composition, contemporary blockbuster-poster energy, "
-        "no text, no watermark, no dark or dim tones, 16:9 widescreen."
+        f"A hard-hitting, highly provocative breaking-news YouTube thumbnail photo representing the topic: {topic}. "
+        "Photorealistic, shot on a professional DSLR camera, real photojournalism quality, realistic lighting "
+        "and textures, not an illustration, not a painting, not cartoon, not 3D render. "
+        "Viral high-stakes news-channel thumbnail style: extreme dramatic close-up framing, intense facial "
+        "expressions or high-tension action, bold vibrant high-saturation colors, punchy high contrast, "
+        "bright clean high-key lighting, sharp focus, highly detailed, professional broadcast-network polish, "
+        "credible and authoritative news-studio production value, no text, no watermark, no dark or muddy "
+        "tones, 16:9 widescreen composition."
     )
     result = _generate_with_retry(prompt)
     item = result.data[0]
