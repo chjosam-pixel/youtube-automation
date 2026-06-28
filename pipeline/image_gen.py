@@ -9,9 +9,9 @@ from pipeline.config import OPENAI_API_KEY, IMAGE_MODEL, IMAGE_SIZE
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 STYLE_SUFFIX = (
-    ", cinematic documentary illustration, painterly digital art, "
-    "dramatic volumetric lighting, rich color grading, highly detailed, 16:9 widescreen "
-    "composition, no text, no watermark"
+    ", modern bright digital illustration, vivid saturated colors, clean crisp high-key lighting, "
+    "trendy contemporary news-graphic style, sharp and highly detailed, 16:9 widescreen "
+    "composition, no text, no watermark, no dark or muddy tones"
 )
 
 MAX_RETRIES = 5

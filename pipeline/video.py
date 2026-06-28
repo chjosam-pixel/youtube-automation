@@ -37,6 +37,7 @@ def _ken_burns_filter(motion: int, total_frames: int) -> str:
     return (
         f"scale=3840:2160,"
         f"zoompan=z='{z}':x='{x}':y='{y}':d=1:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:fps={VIDEO_FPS},"
+        f"eq=brightness=0.06:saturation=1.35:contrast=1.12,"
         f"format=yuv420p"
     )
 
