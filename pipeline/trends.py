@@ -17,6 +17,7 @@ import json
 GOOGLE_TRENDS_GEOS = ["SA", "EG", "US"]
 REDDIT_URL = "https://www.reddit.com/r/all/top.json?limit=25&t=day"
 USER_AGENT = "Mozilla/5.0 (compatible; trend-pulse-bot/1.0)"
+REDDIT_USER_AGENT = "trend-pulse-bot/1.0 (by /u/trendpulse999)"
 
 
 def _load_used():
@@ -32,7 +33,7 @@ def _save_used(used):
 def _fetch_google_trends():
     topics = []
     for geo in GOOGLE_TRENDS_GEOS:
-        url = f"https://trends.google.com/trends/trendingsearches/daily/rss?geo={geo}"
+        url = f"https://trends.google.com/trending/rss?geo={geo}"
         try:
             resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
             resp.raise_for_status()
@@ -41,7 +42,8 @@ def _fetch_google_trends():
                 title = item.findtext("title")
                 if title:
                     topics.append(title.strip())
-        except (requests.RequestException, ET.ParseError):
+        except (requests.RequestException, ET.ParseError) as exc:
+            print(f"[trends] Google Trends fetch failed for geo={geo}: {exc}")
             continue
     return topics
 
@@ -49,15 +51,15 @@ def _fetch_google_trends():
 def _fetch_reddit_trends():
     topics = []
     try:
-        resp = requests.get(REDDIT_URL, headers={"User-Agent": USER_AGENT}, timeout=15)
+        resp = requests.get(REDDIT_URL, headers={"User-Agent": REDDIT_USER_AGENT}, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         for child in data.get("data", {}).get("children", []):
             title = child.get("data", {}).get("title")
             if title:
                 topics.append(title.strip())
-    except (requests.RequestException, ValueError):
-        pass
+    except (requests.RequestException, ValueError) as exc:
+        print(f"[trends] Reddit fetch failed: {exc}")
     return topics
 
 
