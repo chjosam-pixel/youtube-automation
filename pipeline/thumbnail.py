@@ -22,9 +22,10 @@ def _to_display_text(text: str) -> str:
 
 def _generate_background(topic: str, out_path: Path) -> Path:
     prompt = (
-        f"A dramatic cinematic key art poster representing the topic: {topic}. "
-        "Epic documentary thumbnail style, painterly, dramatic lighting, "
-        "high contrast, no text, no watermark, 16:9 widescreen."
+        f"An eye-catching, attention-grabbing YouTube thumbnail key art representing the topic: {topic}. "
+        "Viral news/documentary thumbnail style, bold vibrant high-saturation colors, extreme dramatic "
+        "lighting and contrast, expressive dynamic composition, blockbuster movie-poster energy, "
+        "no text, no watermark, 16:9 widescreen."
     )
     result = _generate_with_retry(prompt)
     item = result.data[0]
@@ -43,14 +44,14 @@ def _draw_title_text(image: Image.Image, title: str) -> Image.Image:
     overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    font_size = 72
+    font_size = 130
     font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
 
-    wrapped = textwrap.wrap(title, width=22)
-    while len(wrapped) > 3 and font_size > 36:
+    wrapped = textwrap.wrap(title, width=14)
+    while len(wrapped) > 3 and font_size > 80:
         font_size -= 4
         font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
-        wrapped = textwrap.wrap(title, width=22)
+        wrapped = textwrap.wrap(title, width=14)
 
     wrapped = [_to_display_text(line) for line in wrapped]
 
@@ -68,13 +69,20 @@ def _draw_title_text(image: Image.Image, title: str) -> Image.Image:
     overlay = Image.alpha_composite(overlay, shadow)
     draw = ImageDraw.Draw(overlay)
 
+    outline_width = 8
+    outline_offsets = [
+        (dx, dy)
+        for dx in range(-outline_width, outline_width + 1, 2)
+        for dy in range(-outline_width, outline_width + 1, 2)
+        if dx != 0 or dy != 0
+    ]
     for line in wrapped:
         bbox = draw.textbbox((0, 0), line, font=font)
         w = bbox[2] - bbox[0]
         x = (image.size[0] - w) / 2
-        for dx, dy in [(-3, -3), (3, -3), (-3, 3), (3, 3), (0, 0)]:
-            color = (0, 0, 0, 255) if (dx, dy) != (0, 0) else (255, 215, 0, 255)
-            draw.text((x + dx, y + dy), line, font=font, fill=color)
+        for dx, dy in outline_offsets:
+            draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
+        draw.text((x, y), line, font=font, fill=(255, 215, 0, 255))
         y += line_height
 
     return Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")

@@ -86,9 +86,9 @@ def concat_clips(clip_paths: list[Path], out_path: Path) -> Path:
 
 def burn_subtitles(in_video: Path, srt_path: Path, out_video: Path) -> Path:
     style = (
-        "FontName=Amiri,FontSize=22,PrimaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=0,"
-        "MarginV=60,Alignment=2"
+        "FontName=Amiri,FontSize=96,Bold=1,PrimaryColour=&H00FFFFFF,"
+        "OutlineColour=&H00000000,BorderStyle=1,Outline=5,Shadow=2,"
+        "MarginV=90,Alignment=2"
     )
     vf = f"subtitles={srt_path}:force_style='{style}'"
     cmd = [
