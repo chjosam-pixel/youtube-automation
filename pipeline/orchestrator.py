@@ -90,7 +90,7 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
         print(f"Uploaded: {result['youtube_url']}")
 
         print("Uploading Shorts clip to YouTube...")
-        shorts_title = f"{script['title'][:90]} #Shorts"
+        shorts_title = f"{script['title'][:50]} #Shorts"
         shorts_description = f"{script['description']}\n\n#Shorts"
         shorts_tags = list(script["tags"])
         if "Shorts" not in shorts_tags:
