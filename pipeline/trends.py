@@ -107,7 +107,13 @@ def get_trending_topic() -> dict:
             "(all sources empty/failed, or all current trends already used)."
         )
 
-    topic, context = available[0]
+    # Prefer topics with real news headlines attached: they ground the script
+    # in actual facts and avoid the model guessing/fabricating context for a
+    # bare, ambiguous keyword.
+    with_context = [(t, ctx) for t, ctx in available if ctx]
+    pool = with_context or available
+
+    topic, context = pool[0]
     used.add(topic)
     _save_used(used)
     return {"topic": topic, "context": context}
