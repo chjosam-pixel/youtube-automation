@@ -9,12 +9,12 @@ from pipeline.tts import synthesize_scenes
 from pipeline.subtitles import build_srt_for_scenes
 from pipeline.video import build_scene_clips, concat_clips, burn_subtitles
 from pipeline.thumbnail import generate_thumbnail
-from pipeline.topics import pick_topic
+from pipeline.trends import get_trending_topic
 
 
 def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status: str = "public") -> dict:
     if topic is None:
-        topic = pick_topic()
+        topic = get_trending_topic()
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = OUTPUT_DIR / run_id

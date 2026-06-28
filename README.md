@@ -87,7 +87,7 @@ GitHub 저장소 **Settings → Secrets and variables → Actions** 에 아래 S
 
 ## 주제 관리
 
-`pipeline/topics.py` 의 `TOPIC_BANK` 목록에서 매일 자동으로 순환 선택되며, 이미 사용한 주제는 `pipeline/used_topics.json` 에 기록되어 중복을 피합니다. 목록을 모두 사용하면 처음부터 다시 순환합니다. 필요시 주제를 추가/수정하세요.
+고정 주제 목록은 사용하지 않습니다. `pipeline/trends.py` 가 매일 Google Trends(일별 인기 검색어 RSS)와 Reddit(`r/all` 일간 인기글)에서 실시간 트렌드를 가져와 그중 하나를 주제로 선택합니다. 이미 사용한 주제는 `pipeline/used_topics.json` 에 기록되어 중복을 피합니다. 두 소스 모두에서 가져올 트렌드가 없으면(또는 전부 이미 사용됨) 파이프라인은 샘플 데이터로 대체하지 않고 오류를 발생시킵니다.
 
 ## 주의사항
 
