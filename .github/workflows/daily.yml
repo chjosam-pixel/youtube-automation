@@ -65,6 +65,7 @@ jobs:
           git config user.email "actions@github.com"
           git add pipeline/used_topics.json
           git diff --staged --quiet || git commit -m "chore: update used topics state [skip ci]"
+          git pull --rebase origin ${{ github.ref_name }}
           git push origin ${{ github.ref_name }}
 
       - name: Upload run artifacts (logs, video metadata)
