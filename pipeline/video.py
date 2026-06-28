@@ -7,8 +7,10 @@ from pipeline.config import (
     VIDEO_FPS,
     SHORTS_WIDTH,
     SHORTS_HEIGHT,
+    SHORTS_MIN_SECONDS,
     SHORTS_MAX_SECONDS,
 )
+from pipeline.subtitles import _scene_sentences, build_srt_from_entries
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -97,29 +99,66 @@ def build_shorts_clip(image_path: Path, audio_path: Path, duration: float, motio
     return out_path
 
 
-def select_shorts_scenes(scenes_with_audio: list[dict], durations: list[float]) -> int:
-    """Return how many leading scenes fit within SHORTS_MAX_SECONDS (at least 1)."""
-    cumulative = 0.0
-    count = 0
-    for d in durations:
-        if count > 0 and cumulative + d > SHORTS_MAX_SECONDS:
-            break
-        cumulative += d
-        count += 1
-    return max(count, 1)
+def _extract_audio_segment(in_audio: Path, start: float, end: float, out_path: Path) -> Path:
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(in_audio),
+        "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
+        "-c:a", "aac", "-b:a", "192k",
+        str(out_path),
+    ]
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    return out_path
 
 
-def build_shorts_clips(scenes_with_audio: list[dict], images: list[Path], out_dir: Path) -> tuple[list[Path], list[float]]:
+def build_shorts_video(
+    scenes_with_audio: list[dict],
+    images: list[Path],
+    out_dir: Path,
+    min_seconds: float = SHORTS_MIN_SECONDS,
+    max_seconds: float = SHORTS_MAX_SECONDS,
+) -> tuple[Path, float]:
+    """Assemble a vertical Shorts video that changes picture at every sentence
+    boundary (cycling through the scene images) instead of holding on one
+    image for an entire multi-sentence scene, and stops once the runtime
+    lands within [min_seconds, max_seconds]."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    clip_paths = []
-    durations = []
-    for i, (scene, image_path) in enumerate(zip(scenes_with_audio, images)):
-        duration = ffprobe_duration(scene["audio_path"])
-        out_path = out_dir / f"short_{i:02d}.mp4"
-        build_shorts_clip(image_path, scene["audio_path"], duration, motion=i % 4, out_path=out_path)
-        clip_paths.append(out_path)
-        durations.append(duration)
-    return clip_paths, durations
+    clip_paths: list[Path] = []
+    entries: list[tuple[str, float, float]] = []
+    cumulative = 0.0
+    sentence_count = 0
+
+    for scene in scenes_with_audio:
+        for text, start, end in _scene_sentences(scene["alignment"]):
+            duration = end - start
+            if duration <= 0.05:
+                continue
+            if sentence_count > 0 and cumulative >= min_seconds and cumulative + duration > max_seconds:
+                break
+
+            seg_audio = out_dir / f"seg_{sentence_count:03d}.m4a"
+            _extract_audio_segment(scene["audio_path"], start, end, seg_audio)
+
+            image_path = images[sentence_count % len(images)]
+            clip_path = out_dir / f"short_{sentence_count:03d}.mp4"
+            build_shorts_clip(image_path, seg_audio, duration, motion=sentence_count % 4, out_path=clip_path)
+
+            clip_paths.append(clip_path)
+            entries.append((text, cumulative, cumulative + duration))
+            cumulative += duration
+            sentence_count += 1
+
+            if cumulative >= max_seconds:
+                break
+        if cumulative >= max_seconds:
+            break
+
+    raw_video = concat_clips(clip_paths, out_dir / "shorts_raw.mp4")
+    srt_path = build_srt_from_entries(entries, out_dir / "shorts_subtitles.srt")
+    final_video = burn_subtitles(
+        raw_video, srt_path, out_dir / "shorts_final.mp4", width=SHORTS_WIDTH, height=SHORTS_HEIGHT
+    )
+    return final_video, cumulative
 
 
 def build_scene_clip(image_path: Path, audio_path: Path, duration: float, motion: int, out_path: Path) -> Path:

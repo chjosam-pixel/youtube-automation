@@ -2,18 +2,12 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from pipeline.config import OUTPUT_DIR, SHORTS_WIDTH, SHORTS_HEIGHT
+from pipeline.config import OUTPUT_DIR
 from pipeline.script_gen import generate_script
 from pipeline.image_gen import generate_images_for_scenes
 from pipeline.tts import synthesize_scenes
-from pipeline.subtitles import build_srt_for_scenes, SHORTS_MAX_LINE_CHARS
-from pipeline.video import (
-    build_scene_clips,
-    concat_clips,
-    burn_subtitles,
-    select_shorts_scenes,
-    build_shorts_clips,
-)
+from pipeline.subtitles import build_srt_for_scenes
+from pipeline.video import build_scene_clips, concat_clips, burn_subtitles, build_shorts_video
 from pipeline.thumbnail import generate_thumbnail
 from pipeline.trends import get_trending_topic
 
@@ -61,26 +55,8 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
     scene_briefs = [s["image_prompt"] for s in scenes if s.get("image_prompt")]
     thumbnail_path = generate_thumbnail(topic, script["title"], run_dir, scene_briefs)
 
-    print("[8/8] Assembling vertical Shorts clip...")
-    shorts_count = select_shorts_scenes(scenes_with_audio, durations)
-    shorts_clip_paths, shorts_durations = build_shorts_clips(
-        scenes_with_audio[:shorts_count], images[:shorts_count], run_dir / "shorts_clips"
-    )
-    shorts_offsets = []
-    shorts_cumulative = 0.0
-    for d in shorts_durations:
-        shorts_offsets.append(shorts_cumulative)
-        shorts_cumulative += d
-    shorts_srt_path = build_srt_for_scenes(
-        scenes_with_audio[:shorts_count],
-        shorts_offsets,
-        run_dir / "shorts_subtitles.srt",
-        max_line_chars=SHORTS_MAX_LINE_CHARS,
-    )
-    shorts_raw = concat_clips(shorts_clip_paths, run_dir / "shorts_raw.mp4")
-    shorts_video = burn_subtitles(
-        shorts_raw, shorts_srt_path, run_dir / "shorts_final.mp4", width=SHORTS_WIDTH, height=SHORTS_HEIGHT
-    )
+    print("[8/8] Assembling vertical Shorts clip (picture changes every sentence)...")
+    shorts_video, shorts_seconds = build_shorts_video(scenes_with_audio, images, run_dir / "shorts")
 
     result = {
         "topic": topic,
