@@ -26,6 +26,7 @@ from hr_monitor.translate import translate_to_korean
 USER_AGENT = "Mozilla/5.0 (compatible; hr-monitor-bot/1.0)"
 MAX_TRACKED_IDS = 2000
 TELEGRAM_MAX_LEN = 4000
+MAX_ITEMS_PER_LOCATION = 8
 
 
 def _load_state() -> set[str]:
@@ -153,17 +154,14 @@ def run_once(dry_run: bool = False) -> list[dict]:
             print(f"[hr_monitor] fetch failed for {source} ({region}): {exc}")
             continue
 
-        for item in items:
+        for item in items[:MAX_ITEMS_PER_LOCATION]:
             if not _is_recent(item["pub_date"]):
                 continue
             item_id = _item_id(item, region)
             if item_id in seen:
                 continue
 
-            categories = classify(f"{item['title']} {item['description']}")
-            if not categories:
-                new_seen.add(item_id)
-                continue
+            categories = classify(f"{item['title']} {item['description']}") or ["일반 뉴스"]
 
             matches.append(
                 {"region": region, "source": source, "categories": categories, "item": item}
