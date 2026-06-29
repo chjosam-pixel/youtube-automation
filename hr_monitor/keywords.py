@@ -31,6 +31,12 @@ ALL_CATEGORIES = {
     "Disaster/Emergency": DISASTER_EMERGENCY,
 }
 
+CATEGORY_KR = {
+    "Labor/Workforce Issue": "노동/인력 이슈",
+    "Workplace Safety": "작업장 안전",
+    "Disaster/Emergency": "재난/비상상황",
+}
+
 
 def classify(text: str) -> list[str]:
     """Return the list of category names whose keywords match the text."""

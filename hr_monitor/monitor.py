@@ -1,10 +1,12 @@
-"""Global HR monitoring: scans regional news feeds for labor, workplace-safety,
-and disaster/emergency news, and alerts via Telegram on new matches.
+"""Global HR monitoring: scans location-scoped news feeds for labor,
+workplace-safety, and disaster/emergency news, and sends one combined
+Telegram digest per run for any newly matched items.
 
-Each run fetches the configured RSS feeds, classifies items against the
-keyword categories in keywords.py, and sends a Telegram message for any
-item not already alerted (tracked in alerted_items.json so re-runs don't
-spam duplicate alerts).
+Each run fetches the configured RSS feeds (one Google News search per
+monitored location), classifies items against the keyword categories in
+keywords.py, and bundles any item not already alerted (tracked in
+alerted_items.json so re-runs don't spam duplicate alerts) into a single
+digest message.
 """
 
 import json
@@ -16,12 +18,14 @@ from email.utils import parsedate_to_datetime
 import requests
 
 from hr_monitor.config import MAX_ITEM_AGE_HOURS, STATE_FILE
-from hr_monitor.keywords import classify
+from hr_monitor.keywords import CATEGORY_KR, classify
 from hr_monitor.sources import FEEDS
 from hr_monitor.telegram_notify import send_telegram_message
+from hr_monitor.translate import translate_to_korean
 
 USER_AGENT = "Mozilla/5.0 (compatible; hr-monitor-bot/1.0)"
 MAX_TRACKED_IDS = 2000
+TELEGRAM_MAX_LEN = 4000
 
 
 def _load_state() -> set[str]:
@@ -79,30 +83,68 @@ def _item_id(item: dict, region: str) -> str:
     return item["link"] or f"{region}:{item['title']}"
 
 
-def _format_alert(region: str, source: str, categories: list[str], item: dict) -> str:
-    cat_line = ", ".join(categories)
-    lines = [
-        f"\U0001F6A8 <b>HR 모니터링 알림</b>",
-        f"지역: {region} | 출처: {source}",
-        f"분류: {cat_line}",
-        "",
-        f"<b>{item['title']}</b>",
-    ]
-    if item["description"]:
-        lines.append(item["description"][:400])
-    if item["link"]:
-        lines.append(item["link"])
-    return "\n".join(lines)
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _two_line_summary(title: str, description: str) -> str:
+    """Return a short ~2-line summary: the title plus up to one extra sentence."""
+    sentences = [s.strip() for s in _SENTENCE_SPLIT.split(description) if s.strip()]
+    extra = sentences[0] if sentences else ""
+    if extra and extra.lower() not in title.lower():
+        extra = extra[:160]
+        return f"{title}\n{extra}"
+    return title
+
+
+def _build_digest(matches: list[dict]) -> str:
+    lines = [f"\U0001F6A8 <b>HR 모니터링 알림 ({len(matches)}건)</b>", ""]
+    by_region: dict[str, list[dict]] = {}
+    for match in matches:
+        by_region.setdefault(match["region"], []).append(match)
+
+    for region, region_matches in by_region.items():
+        lines.append(f"\U0001F4CD <b>{region}</b>")
+        for match in region_matches:
+            item = match["item"]
+            cat_line = ", ".join(CATEGORY_KR.get(c, c) for c in match["categories"])
+            summary = _two_line_summary(item["title"], item["description"])
+            summary_kr = translate_to_korean(summary)
+            lines.append(f"[{cat_line}] {summary_kr}")
+            if item["link"]:
+                lines.append(item["link"])
+            lines.append("")
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+
+def _chunk_message(text: str, max_len: int = TELEGRAM_MAX_LEN) -> list[str]:
+    if len(text) <= max_len:
+        return [text]
+    chunks = []
+    current = []
+    current_len = 0
+    for block in text.split("\n\n"):
+        block_len = len(block) + 2
+        if current_len + block_len > max_len and current:
+            chunks.append("\n\n".join(current))
+            current, current_len = [], 0
+        current.append(block)
+        current_len += block_len
+    if current:
+        chunks.append("\n\n".join(current))
+    return chunks
 
 
 def run_once(dry_run: bool = False) -> list[dict]:
-    """Scan all configured feeds once and alert on new HR-relevant items.
+    """Scan all configured location feeds once and digest new HR-relevant items
+    into a single Telegram message.
 
-    Returns the list of alerts sent (or that would be sent, if dry_run).
+    Returns the list of matched items (or that would be matched, if dry_run).
     """
     seen = _load_state()
     new_seen = set(seen)
-    alerts = []
+    matches = []
 
     for region, url, source in FEEDS:
         try:
@@ -123,15 +165,18 @@ def run_once(dry_run: bool = False) -> list[dict]:
                 new_seen.add(item_id)
                 continue
 
-            message = _format_alert(region, source, categories, item)
-            if not dry_run:
-                send_telegram_message(message)
-            alerts.append(
+            matches.append(
                 {"region": region, "source": source, "categories": categories, "item": item}
             )
             new_seen.add(item_id)
 
+    if matches:
+        digest = _build_digest(matches)
+        if not dry_run:
+            for chunk in _chunk_message(digest):
+                send_telegram_message(chunk)
+
     if not dry_run:
         _save_state(new_seen)
 
-    return alerts
+    return matches
