@@ -4,6 +4,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 from pipeline.config import YOUTUBE_CLIENT_SECRET_FILE, YOUTUBE_TOKEN_FILE
@@ -79,9 +80,15 @@ def upload_video(
     print(f"Uploaded video id: {video_id}")
 
     if thumbnail_path and thumbnail_path.exists():
-        youtube.thumbnails().set(
-            videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path))
-        ).execute()
+        try:
+            youtube.thumbnails().set(
+                videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path))
+            ).execute()
+        except HttpError as e:
+            # A thumbnail-set failure (e.g. YouTube's thumbnail upload rate limit)
+            # must not abort the run: the video itself already uploaded successfully,
+            # and the Shorts upload that follows is independent of this thumbnail.
+            print(f"Warning: thumbnail upload failed for video {video_id}, continuing without it: {e}")
 
     return video_id
 
