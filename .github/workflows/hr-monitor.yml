@@ -1,0 +1,51 @@
+name: Global HR Monitoring
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"  # every 30 minutes
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no Telegram alerts, no state update)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install requests python-dotenv
+
+      - name: Run HR monitor
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="--dry-run"
+          fi
+          python hr_monitor_main.py $ARGS
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Persist alerted-items state
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git config user.name "hr-monitor-bot"
+          git config user.email "actions@github.com"
+          git add hr_monitor/alerted_items.json
+          git diff --staged --quiet || git commit -m "chore: update HR monitor alerted-items state [skip ci]"
+          git pull --rebase origin ${{ github.ref_name }}
+          git push origin ${{ github.ref_name }}
