@@ -89,6 +89,52 @@ GitHub 저장소 **Settings → Secrets and variables → Actions** 에 아래 S
 
 고정 주제 목록은 사용하지 않습니다. `pipeline/trends.py` 가 매일 Google Trends(일별 인기 검색어 RSS)와 Reddit(`r/all` 일간 인기글)에서 실시간 트렌드를 가져와 그중 하나를 주제로 선택합니다. 이미 사용한 주제는 `pipeline/used_topics.json` 에 기록되어 중복을 피합니다. 두 소스 모두에서 가져올 트렌드가 없으면(또는 전부 이미 사용됨) 파이프라인은 샘플 데이터로 대체하지 않고 오류를 발생시킵니다.
 
+## Global HR 모니터링 시스템 (`hr_monitor/`)
+
+전 세계 주요 지역(중동/아시아/유럽/아프리카/북미/중남미) 뉴스 RSS를 주기적으로 스캔해 HR 담당자가 알아야 할 특이사항(노동 이슈, 작업장 안전사고, 재난/비상상황)을 Telegram으로 알려주는 별도 모듈입니다. 영상 자동화 파이프라인과는 독립적으로 동작합니다.
+
+| 항목 | 내용 |
+|---|---|
+| 뉴스 소스 | BBC World/Asia/Europe/Africa/US&Canada/Latin America, Al Jazeera, CNN RSS (`hr_monitor/sources.py`) |
+| 분류 키워드 | 노동/인력 이슈, 작업장 안전, 재난/비상상황 3개 카테고리 (`hr_monitor/keywords.py`) |
+| 중복 방지 | 이미 알린 기사는 `hr_monitor/alerted_items.json` 에 기록해 재실행 시 중복 알림 방지 |
+| 알림 발송 | Telegram Bot API (`hr_monitor/telegram_notify.py`) |
+| 실행 주기 | GitHub Actions, 30분마다 (`.github/workflows/hr-monitor.yml`) |
+
+### 로컬 설정
+
+`.env` 에 아래 값을 추가하세요 (`.env.example` 참고):
+
+```
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+```
+
+Telegram Bot Token은 [@BotFather](https://t.me/BotFather)에서 발급하고, Chat ID는 알림을 받을 채널/그룹/개인 챗의 ID입니다. **토큰은 절대 코드나 채팅에 평문으로 공유하지 말고 `.env`/GitHub Secrets로만 관리하세요.**
+
+테스트 실행 (알림 전송 없이 매칭 결과만 확인):
+
+```bash
+python hr_monitor_main.py --dry-run
+```
+
+실제 알림 발송:
+
+```bash
+python hr_monitor_main.py
+```
+
+### GitHub Actions 자동 실행
+
+저장소 **Settings → Secrets and variables → Actions** 에 아래 Secret을 등록하세요:
+
+| Secret 이름 | 값 |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
+| `TELEGRAM_CHAT_ID` | 알림 받을 Chat ID |
+
+등록 후 `.github/workflows/hr-monitor.yml` 이 30분마다 자동으로 전 세계 뉴스를 스캔하고, 새로운 HR 특이사항이 발견되면 Telegram으로 알림을 보냅니다.
+
 ## 주의사항
 
 - AI 정지 이미지 + Ken Burns(줌/패닝) 효과로 영상처럼 보이게 합성하며, 실제 AI 영상 클립 생성 API는 비용 문제로 사용하지 않습니다.
