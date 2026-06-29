@@ -2,7 +2,7 @@ name: Global HR Monitoring
 
 on:
   schedule:
-    - cron: "0 4,11,21 * * *"  # 06:00 / 13:00 / 20:00 KST (UTC+9) = 21:00(prev day) / 04:00 / 11:00 UTC
+    - cron: "5 4,11,21 * * *"  # ~06:00 / 13:00 / 20:00 KST (UTC+9) = 21:00(prev day) / 04:00 / 11:00 UTC; offset 5 min off the hour to avoid GitHub's top-of-hour scheduling congestion/delay
   workflow_dispatch:
     inputs:
       dry_run:
