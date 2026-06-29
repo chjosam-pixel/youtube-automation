@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -72,7 +73,16 @@ def upload_video(
 
     response = None
     while response is None:
-        status, response = request.next_chunk()
+        try:
+            status, response = request.next_chunk()
+        except HttpError as e:
+            if e.resp.status >= 500:
+                # Transient server-side hiccup mid-upload; resumable uploads can
+                # just retry the same chunk rather than restarting the whole file.
+                print(f"Upload chunk failed ({e}), retrying in 10s...")
+                time.sleep(10)
+                continue
+            raise
         if status:
             print(f"Upload progress: {int(status.progress() * 100)}%")
 
@@ -80,15 +90,22 @@ def upload_video(
     print(f"Uploaded video id: {video_id}")
 
     if thumbnail_path and thumbnail_path.exists():
-        try:
-            youtube.thumbnails().set(
-                videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path))
-            ).execute()
-        except HttpError as e:
-            # A thumbnail-set failure (e.g. YouTube's thumbnail upload rate limit)
-            # must not abort the run: the video itself already uploaded successfully,
-            # and the Shorts upload that follows is independent of this thumbnail.
-            print(f"Warning: thumbnail upload failed for video {video_id}, continuing without it: {e}")
+        for attempt in range(2):
+            try:
+                youtube.thumbnails().set(
+                    videoId=video_id, media_body=MediaFileUpload(str(thumbnail_path))
+                ).execute()
+                break
+            except HttpError as e:
+                if e.resp.status == 429 and attempt == 0:
+                    print(f"Thumbnail upload rate-limited for video {video_id}, retrying once in 30s...")
+                    time.sleep(30)
+                    continue
+                # A thumbnail-set failure (e.g. YouTube's thumbnail upload rate limit)
+                # must not abort the run: the video itself already uploaded successfully,
+                # and the Shorts upload that follows is independent of this thumbnail.
+                print(f"Warning: thumbnail upload failed for video {video_id}, continuing without it: {e}")
+                break
 
     return video_id
 
