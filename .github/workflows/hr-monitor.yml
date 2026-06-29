@@ -2,7 +2,7 @@ name: Global HR Monitoring
 
 on:
   schedule:
-    - cron: "*/30 * * * *"  # every 30 minutes
+    - cron: "0 4,11,21 * * *"  # 06:00 / 13:00 / 20:00 KST (UTC+9) = 21:00(prev day) / 04:00 / 11:00 UTC
   workflow_dispatch:
     inputs:
       dry_run:
