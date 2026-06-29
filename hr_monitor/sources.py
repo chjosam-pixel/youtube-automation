@@ -1,14 +1,27 @@
-"""Region-tagged news RSS feeds used as HR monitoring sources."""
+"""Location-scoped news sources for the Global HR monitoring system.
 
-# Each entry: (region_label, feed_url, source_name)
-FEEDS = [
-    ("Global", "http://feeds.bbci.co.uk/news/world/rss.xml", "BBC World"),
-    ("Global", "https://www.aljazeera.com/xml/rss/all.xml", "Al Jazeera"),
-    ("Global", "http://rss.cnn.com/rss/cnn_topstories.rss", "CNN"),
-    ("Middle East", "https://www.aljazeera.com/xml/rss/all.xml", "Al Jazeera"),
-    ("Asia", "http://feeds.bbci.co.uk/news/world/asia/rss.xml", "BBC Asia"),
-    ("Europe", "http://feeds.bbci.co.uk/news/world/europe/rss.xml", "BBC Europe"),
-    ("Africa", "http://feeds.bbci.co.uk/news/world/africa/rss.xml", "BBC Africa"),
-    ("US & Canada", "http://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml", "BBC US & Canada"),
-    ("Latin America", "http://feeds.bbci.co.uk/news/world/latin_america/rss.xml", "BBC Latin America"),
+Each entry is a specific office/plant location to monitor. News is fetched
+per-location via Google News RSS search so results stay scoped to that city
+and aren't drowned out by generic world-news noise.
+"""
+
+import urllib.parse
+
+LOCATIONS = [
+    ("Chennai, India", "Chennai India"),
+    ("Pune, India", "Pune India"),
+    ("Monterrey, Mexico", "Monterrey Mexico"),
+    ("Qingdao, China", "Qingdao China"),
+    ("Wuxi, China", "Wuxi China"),
+    ("Troy, Michigan", "Troy Michigan"),
+    ("Tokyo, Japan", "Tokyo Japan"),
 ]
+
+
+def google_news_rss_url(query: str) -> str:
+    encoded = urllib.parse.quote(query)
+    return f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+
+
+# (region_label, feed_url) pairs, kept as FEEDS for compatibility with monitor.py.
+FEEDS = [(label, google_news_rss_url(query), "Google News") for label, query in LOCATIONS]
