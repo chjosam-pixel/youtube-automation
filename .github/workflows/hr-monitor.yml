@@ -1,14 +1,16 @@
 name: Global HR Monitoring
 
 on:
-  schedule:
-    - cron: "5 4,11,21 * * *"  # ~06:00 / 13:00 / 20:00 KST (UTC+9) = 21:00(prev day) / 04:00 / 11:00 UTC; offset 5 min off the hour to avoid GitHub's top-of-hour scheduling congestion/delay
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Dry run (no Telegram alerts, no state update)"
         required: false
         default: "false"
+  # Note: native GitHub Actions `schedule` (cron) triggers were removed because they proved
+  # unreliable on this repo (runs were delayed by hours or skipped entirely under load).
+  # This workflow is instead dispatched on a fixed schedule (06:00 / 13:00 / 20:00 KST)
+  # by an external, more reliable scheduler calling the workflow_dispatch API.
 
 permissions:
   contents: write
