@@ -21,6 +21,18 @@ GOOGLE_TRENDS_GEOS = ["SA", "EG", "US"]
 REDDIT_URL = "https://www.reddit.com/r/all/top.json?limit=25&t=day"
 ALJAZEERA_RSS_URL = "https://www.aljazeera.com/xml/rss/all.xml"
 CNN_RSS_URL = "http://rss.cnn.com/rss/cnn_topstories.rss"
+BBC_RSS_URL = "http://feeds.bbci.co.uk/news/world/rss.xml"
+APNEWS_RSS_URL = "https://apnews.com/apf-topnews?outputType=rss"
+SKYNEWS_RSS_URL = "https://feeds.skynews.com/feeds/rss/world.xml"
+
+INCIDENT_KEYWORDS = {
+    "kill", "killed", "killing", "dead", "death", "deaths", "crash", "explosion",
+    "fire", "earthquake", "attack", "attacks", "arrest", "arrested", "war",
+    "flood", "flooding", "shooting", "shot", "collapse", "evacuate", "evacuated",
+    "disaster", "missing", "rescue", "injured", "wounded", "blast", "storm",
+    "hurricane", "wildfire", "accident", "حادث", "حريق", "زلزال", "انفجار",
+    "مقتل", "قتل", "اعتقال", "كارثة",
+}
 USER_AGENT = "Mozilla/5.0 (compatible; trend-pulse-bot/1.0)"
 REDDIT_USER_AGENT = "trend-pulse-bot/1.0 (by /u/trendpulse999)"
 
@@ -137,6 +149,23 @@ def _fetch_cnn_news():
     return _fetch_news_rss(CNN_RSS_URL, "CNN")
 
 
+def _fetch_bbc_news():
+    return _fetch_news_rss(BBC_RSS_URL, "BBC")
+
+
+def _fetch_apnews():
+    return _fetch_news_rss(APNEWS_RSS_URL, "AP News")
+
+
+def _fetch_skynews():
+    return _fetch_news_rss(SKYNEWS_RSS_URL, "Sky News")
+
+
+def _is_incident_topic(text: str) -> bool:
+    words = _significant_words(text)
+    return bool(words & INCIDENT_KEYWORDS)
+
+
 def _news_context_line(title: str, description: str, source: str) -> str:
     line = title.strip()
     if description:
@@ -171,9 +200,15 @@ def get_trending_topic() -> dict:
 
     aljazeera_items = _fetch_aljazeera_news()
     cnn_items = _fetch_cnn_news()
+    bbc_items = _fetch_bbc_news()
+    ap_items = _fetch_apnews()
+    sky_items = _fetch_skynews()
     news_items = (
         [(t, d, "Al Jazeera") for t, d in aljazeera_items]
         + [(t, d, "CNN") for t, d in cnn_items]
+        + [(t, d, "BBC") for t, d in bbc_items]
+        + [(t, d, "AP News") for t, d in ap_items]
+        + [(t, d, "Sky News") for t, d in sky_items]
     )
 
     candidates = _fetch_google_trends() + _fetch_reddit_trends()
@@ -210,6 +245,19 @@ def get_trending_topic() -> dict:
     # bare, ambiguous keyword.
     with_context = [(t, ctx) for t, ctx in enriched if ctx]
     pool = with_context or enriched
+
+    # Rank by "hotness": how many independent sources corroborate the topic
+    # (more context lines = more widely reported), with a boost for actual
+    # incident/accident-type news over generic trend keywords, per the
+    # requirement to favor 사건 사고 (incident/accident) coverage.
+    def _hotness(item):
+        topic_text, ctx = item
+        score = len(ctx)
+        if _is_incident_topic(topic_text) or any(_is_incident_topic(line) for line in ctx):
+            score += 5
+        return score
+
+    pool.sort(key=_hotness, reverse=True)
 
     topic, context = pool[0]
     used.add(topic)
