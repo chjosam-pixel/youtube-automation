@@ -24,6 +24,14 @@ CNN_RSS_URL = "http://rss.cnn.com/rss/cnn_topstories.rss"
 USER_AGENT = "Mozilla/5.0 (compatible; trend-pulse-bot/1.0)"
 REDDIT_USER_AGENT = "trend-pulse-bot/1.0 (by /u/trendpulse999)"
 
+_BANNED_KEYWORDS = {"cricket", "كريكيت", "ipl", "bcci", "t20", "odi", "icc"}
+
+
+def _is_banned_topic(topic: str) -> bool:
+    lowered = topic.lower()
+    return any(kw in lowered for kw in _BANNED_KEYWORDS)
+
+
 _STOPWORDS = {
     "the", "a", "an", "of", "in", "on", "at", "to", "for", "and", "or", "is",
     "are", "was", "were", "with", "by", "as", "from", "after", "over", "amid",
@@ -173,7 +181,10 @@ def get_trending_topic() -> dict:
     # in their own reporting.
     candidates += [(t, [_news_context_line(t, d, s)]) for t, d, s in news_items]
 
-    available = [(t, ctx) for t, ctx in candidates if t and t not in used]
+    available = [
+        (t, ctx) for t, ctx in candidates
+        if t and t not in used and not _is_banned_topic(t)
+    ]
 
     if not available:
         raise RuntimeError(
