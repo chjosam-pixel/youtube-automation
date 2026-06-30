@@ -10,7 +10,7 @@ from pipeline.config import (
     SHORTS_MIN_SECONDS,
     SHORTS_MAX_SECONDS,
 )
-from pipeline.subtitles import _scene_sentences, build_srt_from_entries, SHORTS_MAX_LINE_CHARS
+from pipeline.subtitles import _scene_sentence_word_groups, build_typewriter_srt, SHORTS_MAX_LINE_CHARS
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -124,12 +124,14 @@ def build_shorts_video(
     lands within [min_seconds, max_seconds]."""
     out_dir.mkdir(parents=True, exist_ok=True)
     clip_paths: list[Path] = []
-    entries: list[tuple[str, float, float]] = []
+    sentence_word_groups: list[list[tuple[str, float, float]]] = []
     cumulative = 0.0
     sentence_count = 0
 
     for scene in scenes_with_audio:
-        for text, start, end in _scene_sentences(scene["alignment"]):
+        for group in _scene_sentence_word_groups(scene["alignment"]):
+            start = group[0][1]
+            end = group[-1][2]
             duration = end - start
             if duration <= 0.05:
                 continue
@@ -144,7 +146,10 @@ def build_shorts_video(
             build_shorts_clip(image_path, seg_audio, duration, motion=sentence_count % 4, out_path=clip_path)
 
             clip_paths.append(clip_path)
-            entries.append((text, cumulative, cumulative + duration))
+            # Shift this sentence's word timestamps from scene-relative time
+            # to the cumulative time of the concatenated Shorts video.
+            abs_group = [(w, cumulative + (wst - start), cumulative + (wen - start)) for w, wst, wen in group]
+            sentence_word_groups.append(abs_group)
             cumulative += duration
             sentence_count += 1
 
@@ -154,7 +159,9 @@ def build_shorts_video(
             break
 
     raw_video = concat_clips(clip_paths, out_dir / "shorts_raw.mp4")
-    srt_path = build_srt_from_entries(entries, out_dir / "shorts_subtitles.srt", max_line_chars=SHORTS_MAX_LINE_CHARS)
+    srt_path = build_typewriter_srt(
+        sentence_word_groups, out_dir / "shorts_subtitles.srt", max_words_visible=4, max_line_chars=SHORTS_MAX_LINE_CHARS
+    )
     final_video = burn_subtitles(
         raw_video, srt_path, out_dir / "shorts_final.mp4", width=SHORTS_WIDTH, height=SHORTS_HEIGHT
     )

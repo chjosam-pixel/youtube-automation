@@ -72,6 +72,78 @@ def build_srt_for_scenes(
     return out_path
 
 
+def _words_from_alignment(alignment: dict):
+    """Group an alignment's per-character timestamps into per-word
+    (word, start, end) tuples, splitting on spaces."""
+    characters = alignment["characters"]
+    starts = alignment["character_start_times_seconds"]
+    ends = alignment["character_end_times_seconds"]
+    words = []
+    chars = []
+    word_start = None
+    word_end = None
+    for ch, st, en in zip(characters, starts, ends):
+        if ch == " ":
+            if chars:
+                words.append(("".join(chars), word_start, word_end))
+                chars = []
+                word_start = None
+            continue
+        if word_start is None:
+            word_start = st
+        chars.append(ch)
+        word_end = en
+    if chars:
+        words.append(("".join(chars), word_start, word_end))
+    return words
+
+
+def _scene_sentence_word_groups(alignment: dict):
+    """Yields one list of (word, start, end) tuples per sentence (split at
+    SENTENCE_END_CHARS), so callers can build word-level (typewriter-style)
+    captions while still knowing the sentence's overall start/end for
+    audio/image clip timing."""
+    words = _words_from_alignment(alignment)
+    group = []
+    for word, st, en in words:
+        group.append((word, st, en))
+        if word and word[-1] in SENTENCE_END_CHARS:
+            yield group
+            group = []
+    if group:
+        yield group
+
+
+def build_typewriter_srt(
+    sentence_word_groups: list[list[tuple[str, float, float]]],
+    out_path: Path,
+    max_words_visible: int = 4,
+    max_line_chars: int = SHORTS_MAX_LINE_CHARS,
+) -> Path:
+    """Build an SRT where caption text grows/slides one word at a time as
+    it's spoken (a sliding window of the last `max_words_visible` words),
+    instead of showing a whole sentence at once. The window keeps each
+    entry short so it always fits the wrapped/margined caption box."""
+    lines = []
+    idx = 1
+    for group in sentence_word_groups:
+        n = len(group)
+        for i, (_, st, en) in enumerate(group):
+            window = group[max(0, i - max_words_visible + 1): i + 1]
+            text = " ".join(w for w, _, _ in window)
+            entry_end = group[i + 1][1] if i + 1 < n else en
+            if entry_end <= st:
+                entry_end = st + 0.15
+            display_text = _wrap_for_display(text, max_line_chars)
+            lines.append(str(idx))
+            lines.append(f"{format_srt_time(st)} --> {format_srt_time(entry_end)}")
+            lines.append(display_text)
+            lines.append("")
+            idx += 1
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path
+
+
 def _scene_sentences(alignment: dict):
     """Yields (text, start, end) split only at full sentence-ending punctuation.
 
