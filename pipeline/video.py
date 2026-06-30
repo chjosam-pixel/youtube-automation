@@ -10,7 +10,7 @@ from pipeline.config import (
     SHORTS_MIN_SECONDS,
     SHORTS_MAX_SECONDS,
 )
-from pipeline.subtitles import _scene_sentences, build_srt_from_entries
+from pipeline.subtitles import _scene_sentences, build_srt_from_entries, SHORTS_MAX_LINE_CHARS
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -154,7 +154,7 @@ def build_shorts_video(
             break
 
     raw_video = concat_clips(clip_paths, out_dir / "shorts_raw.mp4")
-    srt_path = build_srt_from_entries(entries, out_dir / "shorts_subtitles.srt")
+    srt_path = build_srt_from_entries(entries, out_dir / "shorts_subtitles.srt", max_line_chars=SHORTS_MAX_LINE_CHARS)
     final_video = burn_subtitles(
         raw_video, srt_path, out_dir / "shorts_final.mp4", width=SHORTS_WIDTH, height=SHORTS_HEIGHT
     )
@@ -214,11 +214,15 @@ def burn_subtitles(
     """Burn subtitles sized so the text block stays within roughly the bottom
     1/5 of the frame, instead of a fixed huge font that can swallow most of a
     narrow vertical (Shorts) frame."""
-    font_size = max(36, round(height * 0.045))
+    # Base font size on the narrower of the two dimensions: for a portrait
+    # Shorts frame (1080x1920), the 1080px width is what actually bounds line
+    # length, so sizing off the much taller height (as before) produced text
+    # too wide to fit and overflowing past the frame edges.
+    font_size = max(36, round(min(width, height) * 0.045))
     outline = max(3, round(font_size * 0.06))
     shadow = max(1, round(font_size * 0.02))
     margin_v = round(height * 0.04)
-    margin_lr = round(width * 0.05)
+    margin_lr = round(width * 0.07)
     style = (
         f"FontName=Amiri,FontSize={font_size},Bold=1,PrimaryColour=&H00FFFFFF,"
         f"OutlineColour=&H00000000,BorderStyle=1,Outline={outline},Shadow={shadow},"

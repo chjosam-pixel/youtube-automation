@@ -2,7 +2,7 @@ name: Daily YouTube Upload
 
 on:
   schedule:
-    - cron: "7 */4 * * *"  # every 4 hours UTC, offset from the hour mark to avoid GitHub's top-of-hour scheduling congestion = 6 runs/day
+    - cron: "7 */2 * * *"  # every 2 hours UTC, offset from the hour mark to avoid GitHub's top-of-hour scheduling congestion = 12 runs/day
   workflow_dispatch:
     inputs:
       topic:

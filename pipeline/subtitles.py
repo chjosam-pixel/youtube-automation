@@ -100,15 +100,38 @@ def _scene_sentences(alignment: dict):
             yield text, chunk_start, ends[-1]
 
 
-def build_srt_from_entries(entries: list[tuple[str, float, float]], out_path: Path) -> Path:
+def _wrap_for_display(text: str, max_line_chars: int) -> str:
+    """Insert forced ASS line breaks (\\N) so no rendered line exceeds
+    max_line_chars, instead of relying on libass to auto-wrap a whole
+    sentence at a width it may not fit, which can push text past the
+    frame edges on a narrow vertical (Shorts) frame."""
+    words = text.split(" ")
+    lines = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > max_line_chars:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return "\\N".join(lines)
+
+
+def build_srt_from_entries(
+    entries: list[tuple[str, float, float]], out_path: Path, max_line_chars: int | None = None
+) -> Path:
     """entries: list of (text, absolute_start_seconds, absolute_end_seconds), already final."""
     lines = []
     for idx, (text, st, en) in enumerate(entries, start=1):
         if en <= st:
             en = st + 0.8
+        display_text = _wrap_for_display(text, max_line_chars) if max_line_chars else text
         lines.append(str(idx))
         lines.append(f"{format_srt_time(st)} --> {format_srt_time(en)}")
-        lines.append(text)
+        lines.append(display_text)
         lines.append("")
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
