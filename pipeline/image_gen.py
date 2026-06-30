@@ -2,7 +2,7 @@ import base64
 import time
 from pathlib import Path
 
-from openai import OpenAI, RateLimitError
+from openai import BadRequestError, OpenAI, RateLimitError
 
 from pipeline.config import OPENAI_API_KEY, IMAGE_MODEL, IMAGE_SIZE
 
@@ -15,8 +15,24 @@ STYLE_SUFFIX = (
     "not an illustration, not a painting, not cartoon, not 3D render"
 )
 
+# Real news topics (conflict, disasters, etc.) routinely trip OpenAI's image
+# safety system on the first try. Rather than let one blocked scene crash the
+# whole run, soften the prompt to a tasteful, non-graphic angle on the same
+# subject before giving up.
+SAFE_RETRY_SUFFIX = (
+    ", tasteful and non-graphic news photograph, no visible violence, no weapons, "
+    "no blood, no injured people, no graphic combat imagery, respectful documentary "
+    "style focusing on people, places, government buildings, maps, or symbolic imagery "
+    "related to the topic"
+)
+
 MAX_RETRIES = 5
 RETRY_BACKOFF_SECONDS = 20
+
+
+def _is_moderation_blocked(error: BadRequestError) -> bool:
+    body = getattr(error, "body", None) or {}
+    return isinstance(body, dict) and body.get("code") == "moderation_blocked"
 
 
 def _generate_with_retry(full_prompt: str):
@@ -39,7 +55,13 @@ def _generate_with_retry(full_prompt: str):
 
 def generate_scene_image(prompt: str, out_path: Path) -> Path:
     full_prompt = f"{prompt}{STYLE_SUFFIX}"
-    result = _generate_with_retry(full_prompt)
+    try:
+        result = _generate_with_retry(full_prompt)
+    except BadRequestError as e:
+        if not _is_moderation_blocked(e):
+            raise
+        print(f"Image prompt blocked by safety system, retrying with a softened prompt: {e}")
+        result = _generate_with_retry(f"{prompt}{SAFE_RETRY_SUFFIX}")
     item = result.data[0]
     if getattr(item, "b64_json", None):
         image_bytes = base64.b64decode(item.b64_json)
