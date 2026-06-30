@@ -11,13 +11,15 @@ inventing a fallback topic.
 
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import requests
 
 from pipeline.config import TOPICS_STATE_FILE
 import json
 
-GOOGLE_TRENDS_GEOS = ["SA", "EG", "US"]
+GOOGLE_TRENDS_GEOS = ["SA", "EG", "US", "MX", "GB"]
 REDDIT_URL = "https://www.reddit.com/r/all/top.json?limit=25&t=day"
 ALJAZEERA_RSS_URL = "https://www.aljazeera.com/xml/rss/all.xml"
 CNN_RSS_URL = "http://rss.cnn.com/rss/cnn_topstories.rss"
@@ -89,8 +91,13 @@ def _fetch_google_trends():
                     continue
                 context_lines = []
                 pub_date = item.findtext("pubDate")
+                pub_dt = None
                 if pub_date:
                     context_lines.append(f"Trend detected on: {pub_date.strip()}")
+                    try:
+                        pub_dt = parsedate_to_datetime(pub_date.strip())
+                    except Exception:
+                        pass
                 for news_item in item.findall("ht:news_item", NS):
                     news_title = news_item.findtext("ht:news_item_title", namespaces=NS)
                     news_source = news_item.findtext("ht:news_item_source", namespaces=NS)
@@ -99,7 +106,7 @@ def _fetch_google_trends():
                         if news_source:
                             line = f"{line} ({news_source.strip()})"
                         context_lines.append(line)
-                candidates.append((title.strip(), context_lines))
+                candidates.append((title.strip(), context_lines, pub_dt))
         except (requests.RequestException, ET.ParseError) as exc:
             print(f"[trends] Google Trends fetch failed for geo={geo}: {exc}")
             continue
@@ -107,16 +114,19 @@ def _fetch_google_trends():
 
 
 def _fetch_reddit_trends():
-    """Return a list of (topic, context_lines) tuples from Reddit post titles."""
+    """Return a list of (topic, context_lines, pub_dt) tuples from Reddit post titles."""
     candidates = []
     try:
         resp = requests.get(REDDIT_URL, headers={"User-Agent": REDDIT_USER_AGENT}, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         for child in data.get("data", {}).get("children", []):
-            title = child.get("data", {}).get("title")
+            post = child.get("data", {})
+            title = post.get("title")
+            created = post.get("created_utc")
+            pub_dt = datetime.fromtimestamp(created, tz=timezone.utc) if created else None
             if title:
-                candidates.append((title.strip(), []))
+                candidates.append((title.strip(), [], pub_dt))
     except (requests.RequestException, ValueError) as exc:
         print(f"[trends] Reddit fetch failed: {exc}")
     return candidates
@@ -211,13 +221,14 @@ def get_trending_topic() -> dict:
         + [(t, d, "Sky News") for t, d in sky_items]
     )
 
+    now_utc = datetime.now(tz=timezone.utc)
+
     candidates = _fetch_google_trends() + _fetch_reddit_trends()
-    # Al Jazeera/CNN headlines are themselves valid trending topics, grounded
-    # in their own reporting.
-    candidates += [(t, [_news_context_line(t, d, s)]) for t, d, s in news_items]
+    # Al Jazeera/CNN/BBC/AP/Sky headlines are themselves valid trending topics.
+    candidates += [(t, [_news_context_line(t, d, s)], None) for t, d, s in news_items]
 
     available = [
-        (t, ctx) for t, ctx in candidates
+        (t, ctx, pub_dt) for t, ctx, pub_dt in candidates
         if t and t not in used and not _is_banned_topic(t)
     ]
 
@@ -232,34 +243,38 @@ def get_trending_topic() -> dict:
     # script generator has real, attributed facts to ground narration in
     # instead of guessing what an ambiguous trending keyword refers to.
     enriched = []
-    for topic, ctx in available:
+    for topic, ctx, pub_dt in available:
         extra = _matching_news_lines(topic, news_items)
         merged_ctx = list(ctx)
         for line in extra:
             if line not in merged_ctx:
                 merged_ctx.append(line)
-        enriched.append((topic, merged_ctx))
+        enriched.append((topic, merged_ctx, pub_dt))
 
-    # Prefer topics with real news context attached: they ground the script
-    # in actual facts and avoid the model guessing/fabricating context for a
-    # bare, ambiguous keyword.
-    with_context = [(t, ctx) for t, ctx in enriched if ctx]
+    # Only use topics that have real news context — no bare keywords where
+    # the model would have to guess/fabricate what the topic actually refers to.
+    with_context = [(t, ctx, dt) for t, ctx, dt in enriched if ctx]
     pool = with_context or enriched
 
-    # Rank by "hotness": how many independent sources corroborate the topic
-    # (more context lines = more widely reported), with a boost for actual
-    # incident/accident-type news over generic trend keywords, per the
-    # requirement to favor 사건 사고 (incident/accident) coverage.
+    # Rank by hotness:
+    # +1 per corroborating source, +5 for incident/accident content,
+    # +8 if published today (UTC), +4 if published within the last 24 h.
     def _hotness(item):
-        topic_text, ctx = item
+        topic_text, ctx, pub_dt = item
         score = len(ctx)
         if _is_incident_topic(topic_text) or any(_is_incident_topic(line) for line in ctx):
             score += 5
+        if pub_dt:
+            age_hours = (now_utc - pub_dt).total_seconds() / 3600
+            if age_hours <= 12:
+                score += 8
+            elif age_hours <= 24:
+                score += 4
         return score
 
     pool.sort(key=_hotness, reverse=True)
 
-    topic, context = pool[0]
+    topic, context, _ = pool[0]
     used.add(topic)
     _save_used(used)
     return {"topic": topic, "context": context}
