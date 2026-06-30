@@ -231,10 +231,10 @@ def burn_subtitles(
     # Shorts frame (1080x1920), the 1080px width is what actually bounds line
     # length, so sizing off the much taller height (as before) produced text
     # too wide to fit and overflowing past the frame edges.
-    font_size = max(30, round(min(width, height) * 0.034))
-    outline = max(3, round(font_size * 0.06))
+    font_size = max(24, round(min(width, height) * 0.022))
+    outline = max(2, round(font_size * 0.06))
     shadow = max(1, round(font_size * 0.02))
-    margin_v = round(height * 0.06)
+    margin_v = round(height * 0.05)
     margin_lr = round(width * 0.08)
     style = (
         f"FontName=Amiri,FontSize={font_size},Bold=1,PrimaryColour=&H00FFFFFF,"

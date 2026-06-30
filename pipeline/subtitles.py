@@ -2,7 +2,7 @@ from pathlib import Path
 
 MAX_LINE_CHARS = 42
 BREAK_CHARS = set("。！？，；：、.!?,;:؟،؛")
-SHORTS_MAX_LINE_CHARS = 18
+SHORTS_MAX_LINE_CHARS = 26
 SENTENCE_END_CHARS = set("。！？.!?؟")
 
 
