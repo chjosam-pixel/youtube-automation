@@ -10,7 +10,7 @@ from pipeline.config import (
     SHORTS_MIN_SECONDS,
     SHORTS_MAX_SECONDS,
 )
-from pipeline.subtitles import _scene_sentence_word_groups, build_typewriter_srt, SHORTS_MAX_LINE_CHARS
+from pipeline.subtitles import _scene_sentence_word_groups, build_srt_from_entries, SHORTS_MAX_LINE_CHARS
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -159,8 +159,14 @@ def build_shorts_video(
             break
 
     raw_video = concat_clips(clip_paths, out_dir / "shorts_raw.mp4")
-    srt_path = build_typewriter_srt(
-        sentence_word_groups, out_dir / "shorts_subtitles.srt", max_words_visible=4, max_line_chars=SHORTS_MAX_LINE_CHARS
+    # Whole sentence per caption (changes only when the narrator pauses at a
+    # sentence boundary), not per-word: word-by-word reveal was too fast/
+    # frantic to read comfortably.
+    sentence_entries = [
+        (" ".join(w for w, _, _ in group), group[0][1], group[-1][2]) for group in sentence_word_groups
+    ]
+    srt_path = build_srt_from_entries(
+        sentence_entries, out_dir / "shorts_subtitles.srt", max_line_chars=SHORTS_MAX_LINE_CHARS
     )
     final_video = burn_subtitles(
         raw_video, srt_path, out_dir / "shorts_final.mp4", width=SHORTS_WIDTH, height=SHORTS_HEIGHT
