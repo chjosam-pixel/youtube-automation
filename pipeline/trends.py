@@ -58,14 +58,39 @@ def _significant_words(text: str) -> set[str]:
     return {w for w in words if len(w) > 3 and w not in _STOPWORDS}
 
 
-def _load_used():
+_RECENT_CATEGORY_WINDOW = 5  # how many recent topics to remember for diversity
+
+
+def _load_state() -> dict:
     if TOPICS_STATE_FILE.exists():
-        return set(json.loads(TOPICS_STATE_FILE.read_text()))
-    return set()
+        try:
+            raw = json.loads(TOPICS_STATE_FILE.read_text())
+            # Support old format (plain list) and new format (dict with keys)
+            if isinstance(raw, list):
+                return {"used": raw, "recent_keywords": []}
+            return raw
+        except Exception:
+            pass
+    return {"used": [], "recent_keywords": []}
 
 
-def _save_used(used):
-    TOPICS_STATE_FILE.write_text(json.dumps(sorted(used), ensure_ascii=False, indent=2))
+def _save_state(state: dict):
+    TOPICS_STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def _category_overlap_penalty(topic: str, ctx: list[str], recent_kw_sets: list[set]) -> int:
+    """Return a negative penalty if this topic overlaps heavily with recent picks."""
+    if not recent_kw_sets:
+        return 0
+    topic_words = _significant_words(f"{topic} {' '.join(ctx[:3])}")
+    penalty = 0
+    for prev_kw in recent_kw_sets:
+        overlap = len(topic_words & prev_kw)
+        if overlap >= 3:
+            penalty -= 8   # strong category match — heavily penalise
+        elif overlap >= 1:
+            penalty -= 3   # mild overlap
+    return penalty
 
 
 NS = {"ht": "https://trends.google.com/trending/rss"}
@@ -221,7 +246,9 @@ def get_trending_topic() -> dict:
 
     Raises RuntimeError if no live trend source returns a usable, unused topic.
     """
-    used = _load_used()
+    state = _load_state()
+    used = set(state["used"])
+    recent_kw_sets = [set(kws) for kws in state.get("recent_keywords", [])]
 
     aljazeera_items = _fetch_aljazeera_news()
     cnn_items = _fetch_cnn_news()
@@ -286,11 +313,16 @@ def get_trending_topic() -> dict:
                 score += 8
             elif age_hours <= 24:
                 score += 4
+        score += _category_overlap_penalty(topic_text, ctx, recent_kw_sets)
         return score
 
     pool.sort(key=_hotness, reverse=True)
 
     topic, context, _ = pool[0]
+
+    # Persist used topic and update recent-category window
     used.add(topic)
-    _save_used(used)
+    topic_kws = sorted(_significant_words(f"{topic} {' '.join(context[:3])}"))
+    recent_kw_sets_updated = ([list(s) for s in recent_kw_sets] + [topic_kws])[-_RECENT_CATEGORY_WINDOW:]
+    _save_state({"used": sorted(used), "recent_keywords": recent_kw_sets_updated})
     return {"topic": topic, "context": context}
