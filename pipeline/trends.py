@@ -180,8 +180,8 @@ def _fetch_news_rss(url: str, source_name: str):
                     pub_dt = parsedate_to_datetime(pub_date_str.strip())
                 except Exception:
                     pass
-            # Skip articles we can't date, or that are older than 3 days.
-            if pub_dt is None or (now - pub_dt).days > 3:
+            # Skip articles we can't date, or that are older than 48 hours.
+            if pub_dt is None or (now - pub_dt).total_seconds() > 48 * 3600:
                 continue
             description = item.findtext("description") or ""
             description = re.sub(r"<[^>]+>", "", description).strip()

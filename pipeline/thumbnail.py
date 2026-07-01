@@ -104,8 +104,8 @@ def generate_thumbnail(topic: str, title: str, out_dir: Path, scene_briefs: list
     bg_path = out_dir / "thumbnail_bg.png"
     _generate_background(topic, scene_briefs or [], bg_path)
 
-    image = Image.open(bg_path)
-    final = _draw_title_text(image, title)
+    # No text overlay — clean photorealistic image only.
+    image = Image.open(bg_path).convert("RGB").resize(THUMB_SIZE)
     out_path = out_dir / "thumbnail.jpg"
-    final.save(out_path, quality=92)
+    image.save(out_path, quality=92)
     return out_path
