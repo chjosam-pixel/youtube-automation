@@ -133,7 +133,12 @@ def _fetch_reddit_trends():
 
 
 def _fetch_news_rss(url: str, source_name: str):
-    """Return a list of (title, description) tuples from a generic news RSS feed."""
+    """Return a list of (title, description, pub_dt) tuples from a news RSS feed.
+
+    Articles without a parseable pubDate, or older than 3 days, are excluded
+    so stale evergreen content never gets picked as a 'trending' topic.
+    """
+    now = datetime.now(tz=timezone.utc)
     items = []
     try:
         resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=15)
@@ -143,9 +148,19 @@ def _fetch_news_rss(url: str, source_name: str):
             title = item.findtext("title")
             if not title:
                 continue
+            pub_date_str = item.findtext("pubDate") or ""
+            pub_dt = None
+            if pub_date_str:
+                try:
+                    pub_dt = parsedate_to_datetime(pub_date_str.strip())
+                except Exception:
+                    pass
+            # Skip articles we can't date, or that are older than 3 days.
+            if pub_dt is None or (now - pub_dt).days > 3:
+                continue
             description = item.findtext("description") or ""
             description = re.sub(r"<[^>]+>", "", description).strip()
-            items.append((title.strip(), description))
+            items.append((title.strip(), description, pub_dt))
     except (requests.RequestException, ET.ParseError) as exc:
         print(f"[trends] {source_name} fetch failed: {exc}")
     return items
@@ -183,13 +198,13 @@ def _news_context_line(title: str, description: str, source: str) -> str:
     return f"{line} ({source})"
 
 
-def _matching_news_lines(topic: str, news_items: list[tuple[str, str, str]]) -> list[str]:
-    """Find Al Jazeera/CNN headlines that share significant keywords with topic."""
+def _matching_news_lines(topic: str, news_items) -> list[str]:
+    """Find recent news headlines that share significant keywords with topic."""
     topic_words = _significant_words(topic)
     if not topic_words:
         return []
     lines = []
-    for title, description, source in news_items:
+    for title, description, _pub_dt, source in news_items:
         item_words = _significant_words(f"{title} {description}")
         if topic_words & item_words:
             lines.append(_news_context_line(title, description, source))
@@ -213,19 +228,20 @@ def get_trending_topic() -> dict:
     bbc_items = _fetch_bbc_news()
     ap_items = _fetch_apnews()
     sky_items = _fetch_skynews()
+    # news_items: (title, description, pub_dt, source)
     news_items = (
-        [(t, d, "Al Jazeera") for t, d in aljazeera_items]
-        + [(t, d, "CNN") for t, d in cnn_items]
-        + [(t, d, "BBC") for t, d in bbc_items]
-        + [(t, d, "AP News") for t, d in ap_items]
-        + [(t, d, "Sky News") for t, d in sky_items]
+        [(t, d, dt, "Al Jazeera") for t, d, dt in aljazeera_items]
+        + [(t, d, dt, "CNN") for t, d, dt in cnn_items]
+        + [(t, d, dt, "BBC") for t, d, dt in bbc_items]
+        + [(t, d, dt, "AP News") for t, d, dt in ap_items]
+        + [(t, d, dt, "Sky News") for t, d, dt in sky_items]
     )
 
     now_utc = datetime.now(tz=timezone.utc)
 
     candidates = _fetch_google_trends() + _fetch_reddit_trends()
-    # Al Jazeera/CNN/BBC/AP/Sky headlines are themselves valid trending topics.
-    candidates += [(t, [_news_context_line(t, d, s)], None) for t, d, s in news_items]
+    # News headlines are themselves valid trending topics — use their pub_dt for recency scoring.
+    candidates += [(t, [_news_context_line(t, d, s)], dt) for t, d, dt, s in news_items]
 
     available = [
         (t, ctx, pub_dt) for t, ctx, pub_dt in candidates
