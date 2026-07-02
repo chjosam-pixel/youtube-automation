@@ -77,9 +77,28 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
     if upload:
         from pipeline.youtube_upload import upload_video
 
+        # Upload main video first so its URL can be embedded in the Shorts description
+        print("Uploading main video to YouTube...")
+        main_video_id = upload_video(
+            video_path=main_video,
+            title=script["title"][:100],
+            description=script["description"],
+            tags=list(script["tags"]),
+            thumbnail_path=thumbnail_path,
+            privacy_status=privacy_status,
+        )
+        result["youtube_main_video_id"] = main_video_id
+        result["youtube_main_url"] = f"https://www.youtube.com/watch?v={main_video_id}"
+        print(f"Uploaded Main: {result['youtube_main_url']}")
+
         print("Uploading Shorts clip to YouTube...")
         shorts_title = f"{script['title'][:50]} #Shorts"
-        shorts_description = f"{script['description']}\n\n#Shorts"
+        main_url = result["youtube_main_url"]
+        shorts_description = (
+            f"{script['description']}\n\n"
+            f"▶ 전체 영상 보기: {main_url}\n\n"
+            f"#Shorts"
+        )
         shorts_tags = list(script["tags"])
         if "Shorts" not in shorts_tags:
             shorts_tags.append("Shorts")
@@ -95,18 +114,6 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
         result["youtube_shorts_url"] = f"https://www.youtube.com/shorts/{shorts_video_id}"
         print(f"Uploaded Shorts: {result['youtube_shorts_url']}")
 
-        print("Uploading main video to YouTube...")
-        main_video_id = upload_video(
-            video_path=main_video,
-            title=script["title"][:100],
-            description=script["description"],
-            tags=list(script["tags"]),
-            thumbnail_path=thumbnail_path,
-            privacy_status=privacy_status,
-        )
-        result["youtube_main_video_id"] = main_video_id
-        result["youtube_main_url"] = f"https://www.youtube.com/watch?v={main_video_id}"
         (run_dir / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
-        print(f"Uploaded Main: {result['youtube_main_url']}")
 
     return result
