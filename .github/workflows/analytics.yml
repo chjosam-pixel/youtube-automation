@@ -1,0 +1,45 @@
+name: Channel Analytics Report
+
+on:
+  schedule:
+    - cron: "0 9 * * *"   # 매일 오전 9시 UTC (한국 오후 6시)
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "분석 기간 (일)"
+        required: false
+        default: "7"
+
+permissions:
+  contents: read
+
+jobs:
+  analytics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore YouTube credentials (analytics token)
+        run: |
+          mkdir -p credentials
+          echo "$YOUTUBE_CLIENT_SECRET_JSON" > credentials/client_secret.json
+          echo "$YOUTUBE_ANALYTICS_TOKEN_JSON" > credentials/token_analytics.json
+        env:
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+          YOUTUBE_ANALYTICS_TOKEN_JSON: ${{ secrets.YOUTUBE_ANALYTICS_TOKEN_JSON }}
+
+      - name: Run analytics report
+        run: python -m pipeline.analytics ${{ github.event.inputs.days || '7' }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
