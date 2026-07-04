@@ -173,6 +173,10 @@ def run_once(dry_run: bool = False) -> list[dict]:
         if not dry_run:
             for chunk in _chunk_message(digest):
                 send_telegram_message(chunk)
+    else:
+        if not dry_run:
+            now_kst = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            send_telegram_message(f"✅ HR 모니터링 정상 실행 ({now_kst})\n새로운 특이사항 없음")
 
     if not dry_run:
         _save_state(new_seen)
