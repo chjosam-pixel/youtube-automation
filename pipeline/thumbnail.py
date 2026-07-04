@@ -51,62 +51,75 @@ def _generate_background(topic: str, scene_briefs: list[str], out_path: Path) ->
 
 
 def _draw_title_text(image: Image.Image, title: str, size: tuple[int, int] | None = None) -> Image.Image:
-    """Overlay bold Arabic title text on image, guaranteed to stay within frame."""
+    """Overlay bold Arabic title text on image.
+
+    Strategy: chunk the title into 1-2 words per line, then find the largest
+    font size where every line still fits within the safe horizontal margin.
+    This guarantees no clipping regardless of word length.
+    """
     target_size = size or THUMB_SIZE
     image = image.convert("RGB").resize(target_size)
     w_img, h_img = target_size
-
-    # Reshape Arabic text properly before rendering
-    reshaped_title = _to_display_text(title)
-
-    # Start with a font size proportional to image width, shrink until text fits
-    font_size = max(60, w_img // 8)
-    margin_x = int(w_img * 0.06)
+    margin_x = int(w_img * 0.07)
     max_text_width = w_img - margin_x * 2
 
+    # Reshape the full title for PIL rendering (PIL doesn't do Arabic shaping)
+    reshaped_title = _to_display_text(title)
+
+    # Split into 1-2 word chunks for large legible lines
+    words = reshaped_title.split()
+    chunks: list[str] = []
+    i = 0
+    while i < len(words):
+        chunks.append(" ".join(words[i:i + 2]))
+        i += 2
+
+    # Find the largest font size where every chunk fits within max_text_width
+    dummy = Image.new("RGB", (1, 1))
+    draw_dummy = ImageDraw.Draw(dummy)
+    font_size = 160  # start large
     font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
-    # Wrap reshaped text to fit width, shrinking font until ≤ 3 lines and fits
-    wrapped = _wrap_to_fit(reshaped_title, font, max_text_width, font_size)
-    while font_size > 48:
+    while font_size > 50:
         font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
-        wrapped = _wrap_to_fit(reshaped_title, font, max_text_width, font_size)
-        if len(wrapped) <= 3:
+        widths = [draw_dummy.textbbox((0, 0), c, font=font)[2] for c in chunks]
+        if max(widths) <= max_text_width:
             break
         font_size -= 6
 
-    overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
+    line_height = font_size + int(font_size * 0.18)
+    total_text_h = line_height * len(chunks)
+    safe_bottom_margin = int(h_img * 0.05)
 
-    # Dark gradient behind text
+    # Dark gradient covering the bottom portion behind text
+    overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
     gradient = Image.new("L", (1, h_img), color=0)
+    grad_start = h_img - total_text_h - safe_bottom_margin - int(h_img * 0.08)
     for yy in range(h_img):
-        if yy > h_img * 0.45:
-            alpha = int(200 * (yy - h_img * 0.45) / (h_img * 0.55))
-            gradient.putpixel((0, yy), min(alpha, 200))
+        if yy >= grad_start:
+            alpha = int(210 * min(1.0, (yy - grad_start) / max(1, h_img - grad_start)))
+            gradient.putpixel((0, yy), alpha)
     gradient = gradient.resize(target_size)
     shadow_layer = Image.new("RGBA", target_size, (0, 0, 0, 255))
     shadow_layer.putalpha(gradient)
     overlay = Image.alpha_composite(overlay, shadow_layer)
 
     draw = ImageDraw.Draw(overlay)
-    line_height = font_size + int(font_size * 0.2)
-    total_text_h = line_height * len(wrapped)
-    # Bottom-align with safe margin
-    y = h_img - total_text_h - int(h_img * 0.06)
+    y = h_img - total_text_h - safe_bottom_margin
 
-    outline_width = max(4, font_size // 20)
-    outline_offsets = [
+    outline_w = max(4, font_size // 18)
+    offsets = [
         (dx, dy)
-        for dx in range(-outline_width, outline_width + 1, 2)
-        for dy in range(-outline_width, outline_width + 1, 2)
+        for dx in range(-outline_w, outline_w + 1, 2)
+        for dy in range(-outline_w, outline_w + 1, 2)
         if dx != 0 or dy != 0
     ]
-    for line in wrapped:
-        bbox = draw.textbbox((0, 0), line, font=font)
+    for chunk in chunks:
+        bbox = draw.textbbox((0, 0), chunk, font=font)
         lw = bbox[2] - bbox[0]
         x = (w_img - lw) / 2
-        for dx, dy in outline_offsets:
-            draw.text((x + dx, y + dy), line, font=font, fill=(0, 0, 0, 255))
-        draw.text((x, y), line, font=font, fill=(255, 215, 0, 255))
+        for dx, dy in offsets:
+            draw.text((x + dx, y + dy), chunk, font=font, fill=(0, 0, 0, 255))
+        draw.text((x, y), chunk, font=font, fill=(255, 215, 0, 255))
         y += line_height
 
     return Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
@@ -114,8 +127,6 @@ def _draw_title_text(image: Image.Image, title: str, size: tuple[int, int] | Non
 
 def _wrap_to_fit(text: str, font: ImageFont.FreeTypeFont, max_width: int, font_size: int) -> list[str]:
     """Word-wrap pre-reshaped Arabic text so each line fits within max_width pixels."""
-    # Arabic is RTL; textwrap works on characters. Since already reshaped (LTR display order),
-    # we wrap by measuring pixel width with PIL.
     dummy_img = Image.new("RGB", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
 
