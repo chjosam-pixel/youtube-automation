@@ -1,17 +1,9 @@
 from pathlib import Path
 
-import arabic_reshaper
-from bidi.algorithm import get_display
-
 MAX_LINE_CHARS = 42
 BREAK_CHARS = set("。！？，；：、.!?,;:؟،؛")
 SHORTS_MAX_LINE_CHARS = 26
 SENTENCE_END_CHARS = set("。！？.!?؟")
-
-
-def _reshape(text: str) -> str:
-    """Reshape and apply BiDi to Arabic text so ffmpeg/libass renders it correctly."""
-    return get_display(arabic_reshaper.reshape(text))
 
 
 def format_srt_time(t: float) -> str:
@@ -73,7 +65,7 @@ def build_srt_for_scenes(
             en = st + 0.8
         lines.append(str(idx))
         lines.append(f"{format_srt_time(st)} --> {format_srt_time(en)}")
-        lines.append(_reshape(text))
+        lines.append(text)
         lines.append("")
 
     out_path.write_text("\n".join(lines), encoding="utf-8")
@@ -142,7 +134,7 @@ def build_typewriter_srt(
             entry_end = group[i + 1][1] if i + 1 < n else en
             if entry_end <= st:
                 entry_end = st + 0.15
-            display_text = _wrap_for_display(_reshape(text), max_line_chars)
+            display_text = _wrap_for_display(text, max_line_chars)
             lines.append(str(idx))
             lines.append(f"{format_srt_time(st)} --> {format_srt_time(entry_end)}")
             lines.append(display_text)
@@ -208,8 +200,7 @@ def build_srt_from_entries(
     for idx, (text, st, en) in enumerate(entries, start=1):
         if en <= st:
             en = st + 0.8
-        reshaped = _reshape(text)
-        display_text = _wrap_for_display(reshaped, max_line_chars) if max_line_chars else reshaped
+        display_text = _wrap_for_display(text, max_line_chars) if max_line_chars else text
         lines.append(str(idx))
         lines.append(f"{format_srt_time(st)} --> {format_srt_time(en)}")
         lines.append(display_text)
