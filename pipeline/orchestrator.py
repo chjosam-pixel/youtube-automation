@@ -9,7 +9,7 @@ from pipeline.tts import synthesize_scenes
 from pipeline.video import build_shorts_video, build_scene_clips, concat_clips, burn_subtitles
 from pipeline.trends import get_trending_topic
 from pipeline.subtitles import build_srt_for_scenes
-from pipeline.thumbnail import generate_thumbnail
+from pipeline.thumbnail import generate_thumbnail, generate_shorts_thumbnail
 
 
 def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status: str = "public") -> dict:
@@ -68,9 +68,10 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
         "main_duration_seconds": offset,
     }
     (run_dir / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
-    print("Generating thumbnail (no text)...")
+    print("Generating thumbnails...")
     scene_briefs = [s.get("image_prompt", "") for s in scenes[:2]]
     thumbnail_path = generate_thumbnail(topic, script["title"], run_dir / "thumbnail", scene_briefs)
+    shorts_thumbnail_path = generate_shorts_thumbnail(topic, script["title"], run_dir / "thumbnail", scene_briefs)
 
     print(f"Done. Shorts: {shorts_video} ({shorts_seconds:.1f}s) | Main: {main_video} ({offset:.1f}s)")
 
@@ -107,7 +108,7 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
             title=shorts_title,
             description=shorts_description,
             tags=shorts_tags,
-            thumbnail_path=thumbnail_path,
+            thumbnail_path=shorts_thumbnail_path,
             privacy_status=privacy_status,
         )
         result["youtube_shorts_video_id"] = shorts_video_id
