@@ -27,23 +27,67 @@ BBC_RSS_URL = "http://feeds.bbci.co.uk/news/world/rss.xml"
 APNEWS_RSS_URL = "https://apnews.com/apf-topnews?outputType=rss"
 SKYNEWS_RSS_URL = "https://feeds.skynews.com/feeds/rss/world.xml"
 
-INCIDENT_KEYWORDS = {
-    "kill", "killed", "killing", "dead", "death", "deaths", "crash", "explosion",
-    "fire", "earthquake", "attack", "attacks", "arrest", "arrested", "war",
-    "flood", "flooding", "shooting", "shot", "collapse", "evacuate", "evacuated",
-    "disaster", "missing", "rescue", "injured", "wounded", "blast", "storm",
-    "hurricane", "wildfire", "accident", "حادث", "حريق", "زلزال", "انفجار",
-    "مقتل", "قتل", "اعتقال", "كارثة",
-}
 USER_AGENT = "Mozilla/5.0 (compatible; trend-pulse-bot/1.0)"
 REDDIT_USER_AGENT = "trend-pulse-bot/1.0 (by /u/trendpulse999)"
 
 _BANNED_KEYWORDS = {"cricket", "كريكيت", "ipl", "bcci", "t20", "odi", "icc"}
 
+# ── Channel category definitions ──────────────────────────────────────────────
+# The channel publishes exactly three verticals. Every topic must belong to
+# one of them. Categories rotate so no two consecutive videos share the same one.
+
+CATEGORY_INCIDENTS = "incidents"       # حوادث وكوارث — disasters, accidents, crime
+CATEGORY_GEOPOLITICS = "geopolitics"   # سياسة وصراعات — wars, diplomacy, elections
+CATEGORY_SPORTS = "sports"             # رياضة كبرى — football, boxing, major events
+
+CATEGORY_KEYWORDS: dict[str, set[str]] = {
+    CATEGORY_INCIDENTS: {
+        "kill", "killed", "dead", "death", "deaths", "crash", "explosion", "fire",
+        "earthquake", "attack", "attacks", "arrest", "arrested", "flood", "flooding",
+        "shooting", "shot", "collapse", "evacuate", "disaster", "missing", "rescue",
+        "injured", "wounded", "blast", "storm", "hurricane", "wildfire", "accident",
+        "hostage", "massacre", "genocide", "terror", "bomb", "bombing", "poisoning",
+        "حادث", "حريق", "زلزال", "انفجار", "مقتل", "قتل", "اعتقال", "كارثة",
+        "فيضان", "إعصار", "احتجاز", "رهينة", "مجزرة", "هجوم",
+    },
+    CATEGORY_GEOPOLITICS: {
+        "war", "ceasefire", "sanctions", "election", "president", "prime minister",
+        "treaty", "summit", "diplomat", "military", "troops", "invasion", "missile",
+        "nuclear", "nato", "un ", "united nations", "congress", "parliament",
+        "coup", "protest", "revolution", "crisis", "refugee", "border", "sanctions",
+        "حرب", "انتخاب", "رئيس", "وزير", "قمة", "دبلوماسي", "عسكري", "غزو",
+        "صاروخ", "نووي", "ناتو", "أمم متحدة", "انقلاب", "احتجاج", "ثورة",
+        "أزمة", "لاجئ", "حدود", "عقوبات", "اتفاق", "هدنة",
+    },
+    CATEGORY_SPORTS: {
+        "football", "soccer", "world cup", "champions league", "premier league",
+        "la liga", "bundesliga", "serie a", "euro", "copa", "olympic", "olympics",
+        "boxing", "mma", "ufc", "formula 1", "f1", "tennis", "grand slam",
+        "wimbledon", "transfer", "goal", "final", "semifinal", "tournament",
+        "كرة القدم", "كأس العالم", "دوري أبطال", "أولمبياد", "بطولة",
+        "ملاكمة", "فورمولا", "تنس", "نقل", "هدف", "نهائي", "بطل",
+    },
+}
+
+INCIDENT_KEYWORDS = CATEGORY_KEYWORDS[CATEGORY_INCIDENTS]  # kept for hotness scoring
+
 
 def _is_banned_topic(topic: str) -> bool:
     lowered = topic.lower()
     return any(kw in lowered for kw in _BANNED_KEYWORDS)
+
+
+def _classify_category(topic: str, ctx: list[str]) -> str | None:
+    """Return the matching channel category, or None if no category matches."""
+    text = f"{topic} {' '.join(ctx[:5])}".lower()
+    scores: dict[str, int] = {}
+    for cat, keywords in CATEGORY_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in text)
+        if score:
+            scores[cat] = score
+    if not scores:
+        return None
+    return max(scores, key=lambda c: scores[c])
 
 
 _STOPWORDS = {
@@ -249,6 +293,7 @@ def get_trending_topic() -> dict:
     state = _load_state()
     used = set(state["used"])
     recent_kw_sets = [set(kws) for kws in state.get("recent_keywords", [])]
+    last_category: str | None = state.get("last_category")
 
     aljazeera_items = _fetch_aljazeera_news()
     cnn_items = _fetch_cnn_news()
@@ -270,40 +315,46 @@ def get_trending_topic() -> dict:
     # News headlines are themselves valid trending topics — use their pub_dt for recency scoring.
     candidates += [(t, [_news_context_line(t, d, s)], dt) for t, d, dt, s in news_items]
 
-    available = [
-        (t, ctx, pub_dt) for t, ctx, pub_dt in candidates
-        if t and t not in used and not _is_banned_topic(t)
-    ]
+    # Filter: unused, not banned, must belong to one of the 3 channel categories
+    categorized = []
+    for t, ctx, pub_dt in candidates:
+        if not t or t in used or _is_banned_topic(t):
+            continue
+        cat = _classify_category(t, ctx)
+        if cat:
+            categorized.append((t, ctx, pub_dt, cat))
 
-    if not available:
+    if not categorized:
         raise RuntimeError(
-            "No live trending topics available from Google Trends, Reddit, "
-            "Al Jazeera or CNN (all sources empty/failed, or all current "
-            "trends already used)."
+            "No live trending topics found in the channel's three categories "
+            "(incidents / geopolitics / sports). All live sources returned "
+            "nothing, or every current topic is already used or banned."
         )
 
-    # Cross-reference each candidate against Al Jazeera/CNN reporting so the
-    # script generator has real, attributed facts to ground narration in
-    # instead of guessing what an ambiguous trending keyword refers to.
+    # Category rotation: prefer topics whose category differs from last run.
+    # Partition into preferred (different category) and fallback (same category).
+    preferred = [(t, ctx, dt, cat) for t, ctx, dt, cat in categorized if cat != last_category]
+    available_with_cat = preferred if preferred else categorized
+
+    # Cross-reference each candidate against news feeds for factual context
     enriched = []
-    for topic, ctx, pub_dt in available:
+    for topic, ctx, pub_dt, cat in available_with_cat:
         extra = _matching_news_lines(topic, news_items)
         merged_ctx = list(ctx)
         for line in extra:
             if line not in merged_ctx:
                 merged_ctx.append(line)
-        enriched.append((topic, merged_ctx, pub_dt))
+        enriched.append((topic, merged_ctx, pub_dt, cat))
 
-    # Only use topics that have real news context — no bare keywords where
-    # the model would have to guess/fabricate what the topic actually refers to.
-    with_context = [(t, ctx, dt) for t, ctx, dt in enriched if ctx]
+    # Prefer topics with real news context
+    with_context = [(t, ctx, dt, cat) for t, ctx, dt, cat in enriched if ctx]
     pool = with_context or enriched
 
     # Rank by hotness:
-    # +1 per corroborating source, +5 for incident/accident content,
-    # +8 if published today (UTC), +4 if published within the last 24 h.
+    # +1 per corroborating source, +5 for incident content,
+    # +8 if published within 12h, +4 within 24h, diversity penalty for repeated keywords
     def _hotness(item):
-        topic_text, ctx, pub_dt = item
+        topic_text, ctx, pub_dt, _ = item
         score = len(ctx)
         if _is_incident_topic(topic_text) or any(_is_incident_topic(line) for line in ctx):
             score += 5
@@ -318,11 +369,16 @@ def get_trending_topic() -> dict:
 
     pool.sort(key=_hotness, reverse=True)
 
-    topic, context, _ = pool[0]
+    topic, context, _, chosen_category = pool[0]
 
-    # Persist used topic and update recent-category window
+    # Persist state
     used.add(topic)
     topic_kws = sorted(_significant_words(f"{topic} {' '.join(context[:3])}"))
     recent_kw_sets_updated = ([list(s) for s in recent_kw_sets] + [topic_kws])[-_RECENT_CATEGORY_WINDOW:]
-    _save_state({"used": sorted(used), "recent_keywords": recent_kw_sets_updated})
-    return {"topic": topic, "context": context}
+    _save_state({
+        "used": sorted(used),
+        "recent_keywords": recent_kw_sets_updated,
+        "last_category": chosen_category,
+    })
+    print(f"[trends] Selected category: {chosen_category} | Topic: {topic}")
+    return {"topic": topic, "context": context, "category": chosen_category}

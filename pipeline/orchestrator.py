@@ -17,10 +17,12 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
     clip for the run. Long-form main-video generation has been retired:
     only the Shorts pipeline runs now."""
     context: list[str] = []
+    category: str | None = None
     if topic is None:
         trend = get_trending_topic()
         topic = trend["topic"]
         context = trend["context"]
+        category = trend.get("category")
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = OUTPUT_DIR / run_id
@@ -30,7 +32,7 @@ def run_pipeline(topic: str | None = None, upload: bool = False, privacy_status:
         print(f"[1/5] Context: {context}")
 
     print("[2/5] Generating script...")
-    script = generate_script(topic, context)
+    script = generate_script(topic, context, category=category)
     (run_dir / "script.json").write_text(json.dumps(script, ensure_ascii=False, indent=2))
     scenes = script["scenes"]
 
