@@ -1,10 +1,9 @@
 import base64
-import textwrap
+import subprocess
+import tempfile
 from pathlib import Path
 
-import arabic_reshaper
-from bidi.algorithm import get_display
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from openai import OpenAI
 
 from pipeline.config import OPENAI_API_KEY, IMAGE_MODEL
@@ -13,11 +12,7 @@ from pipeline.image_gen import _generate_with_retry
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 THUMB_SIZE = (1280, 720)
-ARABIC_FONT_PATH = "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Bold.ttf"
-
-
-def _to_display_text(text: str) -> str:
-    return get_display(arabic_reshaper.reshape(text))
+ARABIC_FONT_NAME = "Amiri Bold"
 
 
 def _generate_background(topic: str, scene_briefs: list[str], out_path: Path) -> Path:
@@ -50,113 +45,130 @@ def _generate_background(topic: str, scene_briefs: list[str], out_path: Path) ->
     return out_path
 
 
-def _draw_title_text(image: Image.Image, title: str, size: tuple[int, int] | None = None) -> Image.Image:
-    """Overlay bold Arabic title text on image.
+def _render_arabic_text_pango(title: str, target_size: tuple[int, int]) -> Image.Image:
+    """Render Arabic title text using ImageMagick Pango for properly connected RTL script.
 
-    Strategy: chunk the title into 1-2 words per line, then find the largest
-    font size where every line still fits within the safe horizontal margin.
-    This guarantees no clipping regardless of word length.
+    Splits into 1-2 words per line, finds the largest font size where all lines
+    fit within the safe horizontal margin, then composites on a dark gradient.
     """
-    target_size = size or THUMB_SIZE
-    image = image.convert("RGB").resize(target_size)
     w_img, h_img = target_size
-    margin_x = int(w_img * 0.07)
-    max_text_width = w_img - margin_x * 2
+    margin_x = int(w_img * 0.06)
+    max_text_w = w_img - margin_x * 2
 
-    # Reshape the full title for PIL rendering (PIL doesn't do Arabic shaping)
-    reshaped_title = _to_display_text(title)
+    words = title.split()
 
-    # Try 1 word per line first (maximum font size), fall back to 2 words if too many lines
-    words = reshaped_title.split()
-    dummy = Image.new("RGB", (1, 1))
-    draw_dummy = ImageDraw.Draw(dummy)
+    def make_chunks(wds: list[str], per_line: int) -> list[str]:
+        return [" ".join(wds[i:i + per_line]) for i in range(0, len(wds), per_line)]
 
-    def make_chunks(words, per_line):
-        c = []
-        for i in range(0, len(words), per_line):
-            c.append(" ".join(words[i:i + per_line]))
-        return c
+    def pango_text_width(lines: list[str], font_size: int) -> int:
+        """Measure rendered pixel width using ImageMagick Pango in a temp file."""
+        markup = "\n".join(
+            f'<span font="{ARABIC_FONT_NAME} {font_size}" color="white">{ln}</span>'
+            for ln in lines
+        )
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            tmp = f.name
+        try:
+            subprocess.run(
+                ["convert", "-size", f"{w_img}x{h_img}", "-background", "transparent",
+                 f"pango:{markup}", tmp],
+                capture_output=True, check=True,
+            )
+            img = Image.open(tmp)
+            return img.size[0]
+        finally:
+            Path(tmp).unlink(missing_ok=True)
 
-    # Find largest font where all chunks fit width, preferring 1 word/line then 2
-    font_size = 280
-    chunks: list[str] = []
-    font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
+    # Find largest font size where lines fit, trying 1 word/line then 2
+    chosen_chunks: list[str] = []
+    chosen_font_size = 60
     for per_line in [1, 2]:
-        font_size = 280
-        while font_size > 60:
-            font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
+        for font_size in range(220, 55, -8):
             cands = make_chunks(words, per_line)
-            widths = [draw_dummy.textbbox((0, 0), c, font=font)[2] for c in cands]
-            if max(widths) <= max_text_width:
-                chunks = cands
+            # Estimate width: use ImageMagick to measure the longest line
+            longest = max(cands, key=len)
+            markup = f'<span font="{ARABIC_FONT_NAME} {font_size}" foreground="white">{longest}</span>'
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                tmp = f.name
+            try:
+                result = subprocess.run(
+                    ["convert", "-background", "transparent", f"pango:{markup}", tmp],
+                    capture_output=True,
+                )
+                if result.returncode != 0:
+                    continue
+                w = Image.open(tmp).size[0]
+            finally:
+                Path(tmp).unlink(missing_ok=True)
+
+            if w <= max_text_w:
+                chosen_chunks = cands
+                chosen_font_size = font_size
                 break
-            font_size -= 8
-        if chunks:
+        if chosen_chunks:
             break
-    if not chunks:
-        chunks = make_chunks(words, 2)
-        font_size = 60
-        font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
 
-    line_height = font_size + int(font_size * 0.18)
-    total_text_h = line_height * len(chunks)
-    safe_bottom_margin = int(h_img * 0.05)
+    if not chosen_chunks:
+        chosen_chunks = make_chunks(words, 2)
+        chosen_font_size = 60
 
-    # Dark gradient covering the bottom portion behind text
-    overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
-    gradient = Image.new("L", (1, h_img), color=0)
-    grad_start = h_img - total_text_h - safe_bottom_margin - int(h_img * 0.08)
-    for yy in range(h_img):
-        if yy >= grad_start:
-            alpha = int(210 * min(1.0, (yy - grad_start) / max(1, h_img - grad_start)))
-            gradient.putpixel((0, yy), alpha)
-    gradient = gradient.resize(target_size)
-    shadow_layer = Image.new("RGBA", target_size, (0, 0, 0, 255))
-    shadow_layer.putalpha(gradient)
-    overlay = Image.alpha_composite(overlay, shadow_layer)
+    # Build full Pango markup (one span per line, newline-separated)
+    markup_lines = "\n".join(
+        f'<span font="{ARABIC_FONT_NAME} {chosen_font_size}" foreground="gold">{ln}</span>'
+        for ln in chosen_chunks
+    )
 
-    draw = ImageDraw.Draw(overlay)
-    y = h_img - total_text_h - safe_bottom_margin
+    # Render text at natural size (no -size constraint to avoid canvas overflow errors)
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        text_tmp = f.name
+    try:
+        subprocess.run(
+            ["convert", "-background", "transparent", f"pango:{markup_lines}", text_tmp],
+            capture_output=True, check=True,
+        )
+        text_img = Image.open(text_tmp).convert("RGBA")
+    finally:
+        Path(text_tmp).unlink(missing_ok=True)
 
-    outline_w = max(4, font_size // 18)
-    offsets = [
-        (dx, dy)
-        for dx in range(-outline_w, outline_w + 1, 2)
-        for dy in range(-outline_w, outline_w + 1, 2)
-        if dx != 0 or dy != 0
-    ]
-    for chunk in chunks:
-        bbox = draw.textbbox((0, 0), chunk, font=font)
-        lw = bbox[2] - bbox[0]
-        x = (w_img - lw) / 2
-        for dx, dy in offsets:
-            draw.text((x + dx, y + dy), chunk, font=font, fill=(0, 0, 0, 255))
-        draw.text((x, y), chunk, font=font, fill=(255, 215, 0, 255))
-        y += line_height
-
-    return Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+    # Composite text onto a full-canvas transparent layer, gravity=South with margin
+    canvas = Image.new("RGBA", target_size, (0, 0, 0, 0))
+    tw, th = text_img.size
+    # Clamp to canvas width just in case
+    if tw > w_img:
+        scale = w_img / tw
+        text_img = text_img.resize((w_img, int(th * scale)), Image.LANCZOS)
+        tw, th = text_img.size
+    bottom_margin = int(h_img * 0.05)
+    paste_x = (w_img - tw) // 2
+    paste_y = h_img - th - bottom_margin
+    canvas.paste(text_img, (paste_x, max(0, paste_y)))
+    return canvas
 
 
-def _wrap_to_fit(text: str, font: ImageFont.FreeTypeFont, max_width: int, font_size: int) -> list[str]:
-    """Word-wrap pre-reshaped Arabic text so each line fits within max_width pixels."""
-    dummy_img = Image.new("RGB", (1, 1))
-    draw = ImageDraw.Draw(dummy_img)
+def _draw_title_text(image: Image.Image, title: str, size: tuple[int, int] | None = None) -> Image.Image:
+    """Overlay bold Arabic title text on image using ImageMagick Pango for correct RTL rendering."""
+    target_size = size or THUMB_SIZE
+    image = image.convert("RGBA").resize(target_size)
+    w_img, h_img = target_size
 
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        candidate = f"{current} {word}".strip() if current else word
-        bbox = draw.textbbox((0, 0), candidate, font=font)
-        if bbox[2] - bbox[0] <= max_width:
-            current = candidate
-        else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines or [text]
+    # Dark gradient at the bottom behind text
+    gradient_layer = Image.new("RGBA", target_size, (0, 0, 0, 0))
+    grad_height = int(h_img * 0.55)
+    grad_start = h_img - grad_height
+    pixels = gradient_layer.load()
+    for yy in range(grad_start, h_img):
+        alpha = int(200 * min(1.0, (yy - grad_start) / max(1, grad_height)))
+        for xx in range(w_img):
+            pixels[xx, yy] = (0, 0, 0, alpha)
+
+    base = Image.alpha_composite(image, gradient_layer)
+
+    # Render Arabic text via ImageMagick Pango
+    text_layer = _render_arabic_text_pango(title, target_size)
+
+    result = Image.alpha_composite(base, text_layer)
+    return result.convert("RGB")
+
 
 
 def generate_thumbnail(topic: str, title: str, out_dir: Path, scene_briefs: list[str] | None = None) -> Path:
