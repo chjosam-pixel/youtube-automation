@@ -66,25 +66,37 @@ def _draw_title_text(image: Image.Image, title: str, size: tuple[int, int] | Non
     # Reshape the full title for PIL rendering (PIL doesn't do Arabic shaping)
     reshaped_title = _to_display_text(title)
 
-    # Split into 1-2 word chunks for large legible lines
+    # Try 1 word per line first (maximum font size), fall back to 2 words if too many lines
     words = reshaped_title.split()
-    chunks: list[str] = []
-    i = 0
-    while i < len(words):
-        chunks.append(" ".join(words[i:i + 2]))
-        i += 2
-
-    # Find the largest font size where every chunk fits within max_text_width
     dummy = Image.new("RGB", (1, 1))
     draw_dummy = ImageDraw.Draw(dummy)
-    font_size = 160  # start large
+
+    def make_chunks(words, per_line):
+        c = []
+        for i in range(0, len(words), per_line):
+            c.append(" ".join(words[i:i + per_line]))
+        return c
+
+    # Find largest font where all chunks fit width, preferring 1 word/line then 2
+    font_size = 280
+    chunks: list[str] = []
     font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
-    while font_size > 50:
-        font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
-        widths = [draw_dummy.textbbox((0, 0), c, font=font)[2] for c in chunks]
-        if max(widths) <= max_text_width:
+    for per_line in [1, 2]:
+        font_size = 280
+        while font_size > 60:
+            font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
+            cands = make_chunks(words, per_line)
+            widths = [draw_dummy.textbbox((0, 0), c, font=font)[2] for c in cands]
+            if max(widths) <= max_text_width:
+                chunks = cands
+                break
+            font_size -= 8
+        if chunks:
             break
-        font_size -= 6
+    if not chunks:
+        chunks = make_chunks(words, 2)
+        font_size = 60
+        font = ImageFont.truetype(ARABIC_FONT_PATH, font_size)
 
     line_height = font_size + int(font_size * 0.18)
     total_text_h = line_height * len(chunks)
