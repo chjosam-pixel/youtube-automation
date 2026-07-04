@@ -103,7 +103,7 @@ def upload_video(
                     print(f"Thumbnail upload attempt {attempt + 1} failed ({e.resp.status}), retrying in {delay}s...")
                     time.sleep(delay)
                     continue
-                print(f"Warning: thumbnail upload failed for video {video_id}, continuing without it: {e}")
+                print(f"Warning: thumbnail upload failed for video {video_id} (HTTP {e.resp.status}): {e.content.decode()[:300]}")
                 break
 
     return video_id
