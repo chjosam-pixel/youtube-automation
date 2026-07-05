@@ -110,9 +110,10 @@ def _build_digest(matches: list[dict]) -> str:
             cat_line = ", ".join(CATEGORY_KR.get(c, c) for c in match["categories"])
             summary = _two_line_summary(item["title"], item["description"])
             summary_kr = translate_to_korean(summary)
-            lines.append(f"[{cat_line}] {summary_kr}")
             if item["link"]:
-                lines.append(item["link"])
+                lines.append(f'[{cat_line}] {summary_kr}  <a href="{item["link"]}">🔗 기사 보기</a>')
+            else:
+                lines.append(f"[{cat_line}] {summary_kr}")
             lines.append("")
         lines.append("")
 
