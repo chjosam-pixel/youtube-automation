@@ -8,13 +8,9 @@ and aren't drowned out by generic world-news noise.
 import urllib.parse
 
 LOCATIONS = [
-    ("Chennai, India", "Chennai India"),
-    ("Pune, India", "Pune India"),
-    ("Monterrey, Mexico", "Monterrey Mexico"),
-    ("Qingdao, China", "Qingdao China"),
-    ("Wuxi, China", "Wuxi China"),
-    ("Troy, Michigan", "Troy Michigan"),
-    ("Tokyo, Japan", "Tokyo Japan"),
+    ("Amsterdam, Netherlands", "Amsterdam Netherlands"),
+    ("London, UK", "London UK"),
+    ("Los Angeles, California", "Los Angeles California"),
 ]
 
 
