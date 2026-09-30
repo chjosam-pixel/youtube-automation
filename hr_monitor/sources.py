@@ -11,6 +11,11 @@ LOCATIONS = [
     ("Amsterdam, Netherlands", "Amsterdam Netherlands"),
     ("London, UK", "London UK"),
     ("Los Angeles, California", "Los Angeles California"),
+    ("Shanghai, China", "Shanghai China"),
+    ("Zhejiang, China", "Zhejiang China"),
+    ("Singapore", "Singapore"),
+    ("Jakarta, Indonesia", "Jakarta Indonesia"),
+    ("New Delhi, India", "New Delhi India"),
 ]
 
 
